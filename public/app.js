@@ -27,11 +27,11 @@ const BOX = {
   aussen: [12, 17, 76, 44, 6],
   schal: [33, 15, 34, 24, 7],
   tasche: [69, 40, 30, 24, 8],
-  face: [35, 1, 30, 19, 9],
-  kopf: [32, -5, 36, 13, 10],
+  face: [30, -4, 40, 25, 9],
+  kopf: [30, -10, 40, 14, 10],
 };
 const CHIP_COLORS = { kopf: '#E4A0F7', schal: '#FF48B0', aussen: '#3E6B48', drueber: '#E8B04B', mitte: '#00A95C', basis: '#0078BF', hose: '#FF6C2F', schuhe: '#8B4A2B', tasche: '#C1502E' };
-const VERSION = '3';
+const VERSION = '4';
 const GHOSTS = ['rgba(255,72,176,.8)', 'rgba(33,64,212,.55)', 'rgba(255,232,0,.95)'];
 // Flugbahn beim Refresh/Shuffle: [dx, dy, Drehung, Verzögerung]
 const FLY = { hose: [-260, 80, -50, 0.04], schuhe: [220, 160, 70, 0.1], basis: [260, -60, 40, 0.16], mitte: [-260, -140, -35, 0.24], drueber: [240, -260, 60, 0.3], aussen: [0, -460, 25, 0.36], schal: [280, -240, 120, 0.44], tasche: [300, 40, -80, 0.4], kopf: [-120, -380, -140, 0.5] };
@@ -329,21 +329,24 @@ function bodySVG() {
 function topBar(left, mid, right) {
   return `<header class="top ui">${left}<div class="top-mid">${mid}</div>${right}</header>`;
 }
-function issueNo() {
-  const d = new Date();
-  return Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
-}
-const kicker = (txt) => `<span class="kicker">Nº ${issueNo()} · ${esc(txt)}</span>`;
-function bigLogo() {
-  return `<div class="top-mid">${kicker('Kleiderschrank')}<h1 class="logo">fithausen</h1></div>`;
-}
 const backBtn = (href, label) => `<a class="iconbtn" href="${href}" aria-label="${esc(label)}">${I.back}</a>`;
+const kicker = (txt) => `<span class="kicker">${esc(txt)}</span>`;
+function collage() {
+  return `<div class="collage-mini" aria-hidden="true">
+      <span style="left:8px;top:14px;width:80px;height:70px;background:#FFE800"></span>
+      <span style="left:62px;top:4px;width:70px;height:64px;background:#FF48B0;opacity:.88"></span>
+      <span style="left:44px;top:46px;width:86px;height:56px;background:#62A8E5;opacity:.85"></span>
+    </div>`;
+}
+function bigLogo() {
+  return `<div class="top-mid">${collage()}<h1 class="logo">fithausen</h1></div>`;
+}
 
 // ---------------------------------------------------------------------------
 // Views
 // ---------------------------------------------------------------------------
 function splashView() {
-  return `<div class="center ui">${bigLogo()}</div>`;
+  return `<div class="center">${bigLogo()}<p class="note">lädt …</p></div>`;
 }
 
 function loginView() {
@@ -374,26 +377,23 @@ function gameView() {
   const w = S.weather;
   const hasPieces = S.pieces.length > 0;
 
-  const now = new Date();
-  const dayLong = now.toLocaleDateString('de-DE', { weekday: 'long' }).toUpperCase();
-  const dateShort = `${now.getDate()}.${now.getMonth() + 1}.`;
-  const place = (S.settings.location || DEFAULT_LOC).name.toUpperCase();
   const filterPill = `<button class="t-filter ${G.wfilter ? '' : 'off'}" data-act="wfilter" aria-pressed="${G.wfilter}" title="Klamotten nach Wetter filtern">${G.wfilter ? 'Filter an' : 'Filter aus'}</button>`;
-  let ticketBody;
+  let wx;
   if (w) {
-    ticketBody = `<span class="t-main"><span class="t-temp">${Math.round(w.temp)}°</span>
-        <span class="t-facts"><span>${Math.round(w.tmin)}–${Math.round(w.tmax)}° · gefühlt ${Math.round(w.feels)}°</span><span>Wind ${Math.round(w.wind)} km/h${w.rain ? '' : ' · ' + esc(w.desc)}</span><span class="t-tip">→ ${esc(w.tip)}</span></span>
-        <span class="t-stamp ${w.rain ? '' : 'dry'}">${esc(w.stamp)}</span></span>
-      ${G.wOpen ? `<span class="t-strip">${w.strip.map((x) => `<span class="${x.r ? 'r' : ''}">${x.h}h <b>${x.t}°</b></span>`).join('')}</span>` : ''}`;
+    const icon = w.rain ? I.rain : w.code <= 1 ? I.sun : I.cloud;
+    const more = G.wOpen ? `<div class="wx-more"><div class="t-strip">${w.strip.map((x) => `<span class="${x.r ? 'r' : ''}">${x.h}h <b>${x.t}°</b></span>`).join('')}</div>
+      <p class="wx-tip">→ ${esc(w.tip)} · Wind ${Math.round(w.wind)} km/h · ${esc((S.settings.location || DEFAULT_LOC).name)}</p></div>` : '';
+    wx = `<div class="card wx" data-act="wopen" role="button" tabindex="0" aria-expanded="${!!G.wOpen}" aria-label="Wetter, antippen für mehr">
+      <div class="wx-row"><span class="wx-icon ${w.rain ? 'rain' : ''}">${icon}</span><span class="wx-temp">${Math.round(w.temp)}°</span>
+      <span class="wx-mid"><span class="wx-stamp ${w.rain ? '' : 'dry'}">${esc(w.stamp)}</span><span class="wx-sub">${Math.round(w.tmin)}–${Math.round(w.tmax)}° · gefühlt ${Math.round(w.feels)}°</span></span>${filterPill}</div>${more}</div>`;
   } else {
-    ticketBody = `<span class="t-main"><span class="t-facts"><span>${S.weatherFailed ? 'Wetter gerade nicht erreichbar' : 'Wetter wird geladen …'}</span></span></span>`;
+    wx = `<div class="card wx"><div class="wx-row"><span class="wx-icon">${I.cloud}</span><span class="wx-mid"><span class="wx-sub">${S.weatherFailed ? 'Wetter gerade nicht erreichbar' : 'Wetter wird geladen …'}</span></span>${filterPill}</div></div>`;
   }
-  const weatherBtn = `<div class="ticket ui" style="--ud:.08s" data-act="wopen" role="button" tabindex="0" aria-expanded="${!!G.wOpen}" aria-label="Wetter, antippen für Tagesverlauf"><span class="tape" aria-hidden="true"></span>
-      <span class="t-head"><span>WETTER · ${dateShort} · ${esc(place)} <span aria-hidden="true">${G.wOpen ? '▴' : '▾'}</span></span>${filterPill}</span>${ticketBody}</div>`;
+  const weatherBtn = wx;
 
   const head = topBar(
     `<a class="iconbtn" href="#/schrank" aria-label="Schrank">${I.hanger}</a>`,
-    `${kicker(dayLong + ' ' + dateShort)}<h1 class="logo"><button class="logo-btn" data-act="refresh" aria-label="fithausen, neu laden">fithausen</button></h1>`,
+    `<h1 class="logo"><button class="logo-btn" data-act="refresh" aria-label="fithausen, neu laden">fithausen</button></h1>`,
     `<a class="iconbtn y" href="#/einstellungen" aria-label="Einstellungen">${I.gear}</a>`
   );
 
@@ -578,15 +578,17 @@ function addView(arg) {
   const head = topBar(backBtn(backHref, 'Abbrechen'), `${kicker(isFace ? 'Gesichter' : ADD.slot ? SLOT[ADD.slot].label : 'Schrank')}<h1 class="title">${isFace ? 'Neues Gesicht' : 'Neues Teil'}</h1>`, '<span class="spacer"></span>');
 
   if (ADD.step === 'pick') {
-    return `${head}<label class="drop">
+    return `${head}<div class="card section howto">
+        <span class="k">So geht's am besten</span>
+        <ol><li>In der Fotos-App bzw. Galerie lange aufs ${isFace ? 'Gesicht' : 'Teil'} drücken</li><li>„Kopieren“ wählen</li><li>Hier einfügen</li></ol>
+        ${navigator.clipboard && navigator.clipboard.read ? `<button class="big primary" data-act="pasteimg">Einfügen</button>` : ''}
+        <div class="pastezone" contenteditable="true" data-pastezone aria-label="Freigestelltes Bild hier einfügen">oder hier lange drücken → Einfügen</div>
+      </div>
+      <label class="drop small">
         <input type="file" accept="image/*" data-file="add" aria-label="Foto auswählen">
         <span class="iconbtn">${I.camera}</span>
-        <strong>${isFace ? 'Selfie aufnehmen oder wählen' : 'Foto aufnehmen oder wählen'}</strong>
-        <p>${isFace ? 'Grimasse ziehen erwünscht. Der Hintergrund wird automatisch entfernt.' : 'Am besten flach auf einem ruhigen Untergrund, ganzes Teil im Bild. Der Hintergrund wird automatisch entfernt.'}</p>
+        <span class="drop-text"><strong>Foto wählen</strong><span>Ohne Freistellen. Automatisch freistellen kannst du danach noch probieren.</span></span>
       </label>
-      ${navigator.clipboard && navigator.clipboard.read ? `<button class="big secondary" data-act="pasteimg">Freigestelltes Bild einfügen</button>` : ''}
-      <div class="pastezone" contenteditable="true" data-pastezone aria-label="Freigestelltes Bild hier einfügen">Hier lange drücken → Einfügen</div>
-      <p class="note">Bestes Freistellen: In der Galerie bzw. Fotos-App lange aufs Teil drücken, „Kopieren“, dann hier einfügen.</p>
       ${ADD.error ? `<p class="note warn" role="alert">${esc(ADD.error)}</p>` : ''}`;
   }
 
@@ -599,7 +601,8 @@ function addView(arg) {
   const res = ADD.useCut && ADD.cutRes ? ADD.cutRes : ADD.origRes;
   const preview = `<div class="paper hero" style="--p:${isFace ? '#FFD6EA' : '#FFF3A6'}"><span class="tape l"></span><span class="tape r"></span><div class="inner" style="--r:-2deg"><img class="cut" style="--g:${GHOSTS[0]}" src="${res.url}" alt="Vorschau"></div></div>`;
   const seg = ADD.cutRes ? `<div class="seg" role="group" aria-label="Bildvariante"><button data-act="usecut" data-v="1" aria-pressed="${ADD.useCut}">Freigestellt</button><button data-act="usecut" data-v="0" aria-pressed="${!ADD.useCut}">Original</button></div>` : '';
-  const cutNote = ADD.cutError ? `<p class="note warn">${esc(ADD.cutError)}</p>` : '';
+  const autoBtn = !ADD.cutRes ? `<button class="pill" data-act="autocut" style="align-self:center">Automatisch freistellen (Beta)</button>` : '';
+  const cutNote = (ADD.cutError ? `<p class="note warn">${esc(ADD.cutError)}</p>` : '') + autoBtn;
   const saveBtns = `<div class="bottom">
       <button class="big primary" data-act="addsave" data-next="0" ${ADD.saving ? 'disabled' : ''}>${ADD.saving ? 'Speichert …' : 'Speichern'}</button>
       <button class="big secondary" data-act="addsave" data-next="1" ${ADD.saving ? 'disabled' : ''}>+ Nächstes</button>
@@ -778,6 +781,7 @@ app.addEventListener('click', async (ev) => {
     }
     case 'dwarm': ADD.draft.warmth = el.dataset.v; render(); return;
     case 'drain': ADD.draft.rain = !ADD.draft.rain; render(); return;
+    case 'autocut': if (ADD.orig) startProcess(ADD.orig.blob, false, true); return;
     case 'addreset': resetAdd(ADD.kind === 'face' ? 'gesicht' : ADD.slot); render(); return;
     case 'addsave': await addSave(el.dataset.next === '1'); return;
     case 'pasteimg':
@@ -1019,7 +1023,7 @@ function setProgress(msg) {
   if (el) el.textContent = msg;
 }
 
-async function startProcess(file, pasted = false) {
+async function startProcess(file, pasted = false, auto = false) {
   ADD.step = 'process'; ADD.error = ''; ADD.cutError = '';
   ADD.progress = 'Bild wird vorbereitet …';
   render();
@@ -1032,7 +1036,7 @@ async function startProcess(file, pasted = false) {
     if ((pasted || /png|webp/.test(file.type)) && await hasAlpha(file)) {
       try { cut = await finalize(file, true); } catch (e) { cut = null; }
     }
-    if (!cut) {
+    if (!cut && auto) {
       try {
         setProgress('Freistell-Modell wird geladen …');
         const raw = await removeBg(small, (key, cur, total) => {
@@ -1043,7 +1047,7 @@ async function startProcess(file, pasted = false) {
         cut = await finalize(raw, true);
       } catch (e) {
         console.warn('Freistellen fehlgeschlagen', e);
-        ADD.cutError = `Automatisches Freistellen hat nicht geklappt (${(e && e.message ? e.message : String(e)).slice(0, 140)}). Tipp: In der Fotos-App lange aufs Teil drücken, „Kopieren“ und hier über „Einfügen“ reinholen.`;
+        ADD.cutError = `Automatisch ging leider nicht (${(e && e.message ? e.message : String(e)).slice(0, 140)}). Nimm den Weg über Kopieren und Einfügen.`;
       }
     }
     ADD.origRes = await finalize(small, false);
@@ -1108,18 +1112,8 @@ async function replacePhoto(id, file) {
   document.body.appendChild(ov);
   const setMsg = (m) => { const e = ov.querySelector('#progress'); if (e) e.textContent = m; };
   try {
-    const small = await downscale(file, 1400);
-    let res;
-    try {
-      const raw = await removeBg(small, (key, cur, total) => {
-        if (String(key).includes('fetch') && total) setMsg(`Lade Freistell-Modell · ${Math.round((cur / total) * 100)} %`);
-        else setMsg('Stelle frei …');
-      });
-      res = await finalize(raw, true);
-    } catch (e) {
-      res = await finalize(small, false);
-      toast('Freistellen ging nicht, Original genommen');
-    }
+    setMsg('Foto wird vorbereitet …');
+    const res = (/png|webp/.test(file.type) && await hasAlpha(file)) ? await finalize(file, true) : await finalize(await downscale(file, 1400), false);
     const img = await uploadImage(res);
     await savePiece(id, { image_id: img.id });
     URL.revokeObjectURL(res.url);
@@ -1141,46 +1135,42 @@ function applyState(d) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('fh-theme', t); } catch (e) { /* privat */ }
 }
-// Klamotten fliegen ein, danach kommt der Rest der Oberfläche zurück
-async function landing() {
+// Klamotten fliegen auf den Avatar
+function landing() {
   S.flyUntil = Date.now() + 1300;
   S.flyAll = true;
   render();
-  await wait(route().view === 'game' ? 950 : 150);
-  S.flyAll = false;
-  app.classList.remove('refreshing');
+  setTimeout(() => { S.flyAll = false; }, 1000);
 }
+const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r(null), ms))]);
 let refreshing = false;
 async function refresh() {
   if (refreshing) return;
   refreshing = true;
-  app.classList.add('refreshing');
-  const t0 = Date.now();
+  const logo = document.querySelector('.logo-btn');
+  if (logo) logo.classList.add('spin');
   try {
     const [d, v] = await Promise.all([
       api('/state'),
-      fetch('/version.json', { cache: 'no-store' }).then((r) => r.json()).catch(() => null),
-      loadWeather(true),
+      withTimeout(fetch('/version.json', { cache: 'no-store' }).then((r) => r.json()).catch(() => null), 3000),
+      withTimeout(loadWeather(true), 4000),
     ]);
     if (v && v.v && v.v !== VERSION) { location.reload(); return; }
     applyState(d);
   } catch (e) { /* offline: einfach weiter */ }
-  await wait(Math.max(0, 450 - (Date.now() - t0)));
-  await landing();
+  landing();
   refreshing = false;
 }
 async function boot() {
-  app.classList.add('refreshing');
   try {
     const d = await api('/state');
     applyState(d);
     S.phase = 'ready';
     const r = route();
     if (r.view === 'add') resetAdd(r.arg);
-    await loadWeather(true);
-    await landing();
+    landing();
+    loadWeather();
   } catch (e) {
-    app.classList.remove('refreshing');
     if (e.status === 401) S.phase = 'login';
     else { S.phase = 'error'; S.err = e; }
     render();
