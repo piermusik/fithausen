@@ -4,15 +4,15 @@
 // Konstanten
 // ---------------------------------------------------------------------------
 const SLOT_DEFS = [
-  { key: 'kopf', label: 'Kopf', long: 'Mützen & Caps' },
-  { key: 'schal', label: 'Schal', long: 'Schals' },
-  { key: 'aussen', label: 'Außen', long: 'Jacken & Mäntel' },
-  { key: 'drueber', label: 'Drüber', long: 'Strickjacken & Overshirts' },
-  { key: 'mitte', label: 'Mitte', long: 'Pullis & Hoodies' },
-  { key: 'basis', label: 'Basis', long: 'Shirts & Hemden' },
-  { key: 'hose', label: 'Hose', long: 'Hosen', required: true },
+  { key: 'kopf', label: 'Mützen', long: 'Mützen & Caps' },
+  { key: 'schal', label: 'Schals', long: 'Schals & Tücher' },
+  { key: 'aussen', label: 'Jacken', long: 'Jacken & Mäntel' },
+  { key: 'drueber', label: 'Strickjacken', long: 'Strickjacken & Overshirts' },
+  { key: 'mitte', label: 'Pullis', long: 'Pullis & Hoodies' },
+  { key: 'basis', label: 'Shirts', long: 'T-Shirts, Longsleeves & Hemden' },
+  { key: 'hose', label: 'Hosen', long: 'Hosen & Shorts', required: true },
   { key: 'schuhe', label: 'Schuhe', long: 'Schuhe', required: true },
-  { key: 'tasche', label: 'Tasche', long: 'Taschen' },
+  { key: 'tasche', label: 'Taschen', long: 'Taschen & Beutel' },
 ];
 const SLOT = Object.fromEntries(SLOT_DEFS.map((s) => [s.key, s]));
 const ORDER = SLOT_DEFS.map((s) => s.key);
@@ -374,7 +374,7 @@ function gameView() {
   const n = cands(sel).length;
   let card;
   if (!sp) {
-    card = `<div class="card slotcard"><div class="slotcard-mid"><span class="lab">${esc(SLOT[sel].label)} · ${esc(SLOT[sel].long)}</span><strong>Noch nichts hier</strong><span class="sub">${n ? 'alle Teile sind schon in anderen Schichten' : 'leg ein Teil für diese Schicht an'}</span></div><a class="pill blue" href="#/neu/${sel}">${I.plus}<span>Anlegen</span></a></div>`;
+    card = `<div class="card slotcard"><div class="slotcard-mid"><span class="lab">${esc(SLOT[sel].label)} · ${esc(SLOT[sel].long)}</span><strong>Noch nichts hier</strong><span class="sub">${n ? 'alle sind schon woanders am Avatar' : 'leg eins an'}</span></div><a class="pill blue" href="#/neu/${sel}">${I.plus}<span>Anlegen</span></a></div>`;
   } else {
     const mismatch = !fits(sp);
     const sub = mismatch ? 'passt heute nicht zum Wetter' : `${wornText(sp)} · ${statOf(sp).count}×`;
@@ -385,7 +385,7 @@ function gameView() {
     </div>`;
   }
   const held = !!G.held[sel];
-  const actions = `<div class="row scroll-x">
+  const actions = `<div class="row scroll-x" data-keep="actions">
     <button class="pill" data-act="roll" ${n ? '' : 'disabled'}>${I.dice}<span>Würfeln</span></button>
     <button class="pill ${held ? 'blue' : ''}" data-act="hold" aria-pressed="${held}">${I.pin}<span>${held ? 'Festgehalten' : 'Festhalten'}</span></button>
     ${SLOT[sel].required ? '' : `<button class="pill" data-act="drop">${I.x}<span>Weglassen</span></button>`}
@@ -399,8 +399,8 @@ function gameView() {
     return `<button class="pill chip ${k === G.sel ? 'on' : ''}" style="--chip:${CHIP_COLORS[k]}" data-act="sel" data-slot="${k}" aria-pressed="${k === G.sel}"><span>${esc(SLOT[k].label)}</span>${G.held[k] ? I.pin : ''}${p && isStale(p) ? '<span class="dot" title="lange nicht getragen"></span>' : ''}</button>`;
   }).join('');
   const coldHint = w && G.wfilter && w.feel === 'kalt' && !G.active.includes('aussen') && cands('aussen').length
-    ? `<button class="pill chip hint" data-act="addslot" data-slot="aussen">${I.plus}<span>Außen, ist kalt</span></button>` : '';
-  const addBtn = inactive.length ? `<button class="pill chip dashed" data-act="addopen" aria-expanded="${G.addOpen}">${I.plus}<span>Schicht</span></button>` : '';
+    ? `<button class="pill chip hint" data-act="addslot" data-slot="aussen">${I.plus}<span>Jacke? Ist kalt</span></button>` : '';
+  const addBtn = inactive.length ? `<button class="pill chip dashed" data-act="addopen" aria-expanded="${G.addOpen}">${I.plus}<span>Dazu</span></button>` : '';
   const addPanel = G.addOpen && inactive.length ? `<div class="card addpanel"><span class="mono">DAZUNEHMEN</span>${inactive.map((k) => `<button class="pill soft" data-act="addslot" data-slot="${k}">${esc(SLOT[k].label)} <span class="muted">${cands(k).length}</span></button>`).join('')}</div>` : '';
 
   // Heute an
@@ -410,7 +410,7 @@ function gameView() {
     ? `<button class="big ok" data-act="wear">${I.check}<span>Gespeichert</span></button>`
     : `<button class="big secondary" data-act="wear">${tw ? 'Heute ändern' : 'Heute an'}</button>`;
 
-  return `${head}${weatherBtn}${stage}${card}${actions}<div class="row scroll-x">${chips}${coldHint}${addBtn}</div>${addPanel}
+  return `${head}${weatherBtn}${stage}${card}${actions}<div class="row scroll-x" data-keep="chips">${chips}${coldHint}${addBtn}</div>${addPanel}
     <div class="bottom"><button class="big primary" data-act="shuffle">${I.shuffle}<span>Shuffle</span></button>${wornBtn}</div>`;
 }
 
@@ -432,7 +432,7 @@ function closetView(tabArg) {
   const tabs = [['alle', 'Alle'], ...SLOT_DEFS.map((s) => [s.key, s.label]), ['gesichter', 'Gesichter']]
     .map(([k, l]) => `<a class="pill ${k === tab ? 'on' : ''}" href="#/schrank/${k}" aria-current="${k === tab ? 'page' : 'false'}">${esc(l)}</a>`).join('');
 
-  if (tab === 'gesichter') return `${head}<nav class="row scroll-x tabs">${tabs}</nav>${facesGrid()}`;
+  if (tab === 'gesichter') return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${facesGrid()}`;
 
   const filters = [['alle', 'Alle'], ['lange', 'Lange nicht'], ['selten', 'Selten'], ['nie', 'Nie getragen']]
     .map(([k, l]) => `<button class="pill ${CLOSET.filter === k ? 'on' : 'soft'}" data-act="cfilter" data-f="${k}">${l}</button>`).join('');
@@ -450,7 +450,7 @@ function closetView(tabArg) {
   const newTile = `<a class="newtile" href="#/neu/${tab === 'alle' ? '' : tab}"><span class="iconbtn">${I.camera}</span><span>Neues Teil</span></a>`;
   const longLine = tab === 'alle' ? '' : `<p class="mono muted" style="margin:0;font-size:12px;text-align:center">${esc(SLOT[tab].long)}</p>`;
   const empty = !list.length && CLOSET.filter !== 'alle' ? `<div class="card empty"><p>Nichts in diesem Filter.</p></div>` : '';
-  return `${head}<nav class="row scroll-x tabs">${tabs}</nav>${longLine}<div class="row scroll-x">${filters}</div>${empty}<div class="grid">${tiles}${newTile}</div>`;
+  return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${longLine}<div class="row scroll-x" data-keep="filters">${filters}</div>${empty}<div class="grid">${tiles}${newTile}</div>`;
 }
 
 function facesGrid() {
@@ -466,7 +466,7 @@ function pieceView(id) {
   const s = statOf(p);
   const mainSlot = p.slots[0];
   const head = topBar(backBtn(`#/schrank/${mainSlot || 'alle'}`, 'Zurück zum Schrank'),
-    `<span class="mono muted" style="font-size:12px">${esc(p.slots.map((k) => SLOT[k]?.label).filter(Boolean).join(' · ') || 'ohne Schicht')}</span>`,
+    `<span class="mono muted" style="font-size:12px">${esc(p.slots.map((k) => SLOT[k]?.label).filter(Boolean).join(' · ') || 'ohne Kategorie')}</span>`,
     `<span class="spacer"></span>`);
   const hero = paperHTML(p, 'hero', `<span class="tape l" aria-hidden="true"></span><span class="tape r" aria-hidden="true"></span>
     <label class="hero-btn">${I.camera}<span>Foto ändern</span><input class="sr" type="file" accept="image/*" data-file="replace" data-id="${p.id}"></label>`);
@@ -497,7 +497,7 @@ function pieceView(id) {
       <p class="sub ${isStale(p) && s.count ? 'warn' : ''}" style="margin:2px 0 0">${esc(wornText(p))}${p.brand ? ' · ' + esc(p.brand) : ''}</p></div>
     <div class="card stats"><div><span class="k">Getragen</span><b>${s.count}×</b></div><div><span class="k">Zuletzt</span><b>${fmtDate(s.last)}</b></div><div><span class="k">Dabei seit</span><b>${fmtDate((p.created_at || '').slice(0, 10))}</b></div></div>
     <div class="card section">
-      <div class="field"><span class="k">Passt in Schicht</span><div class="wrap">${slotPills}</div></div>
+      <div class="field"><span class="k">Kategorie</span><div class="wrap">${slotPills}</div></div>
       <div class="field"><span class="k">Wetter</span><div class="wrap">${warmPills}${rainPill}</div></div>
       <div class="field"><span class="k">Farbe</span><div class="colorrow"><input type="color" value="${esc(p.color || '#BBBBBB')}" data-pfield="color" data-id="${p.id}" aria-label="Farbe"><span class="muted" style="font-size:14px">für Platzhalter und Übersicht</span></div></div>
     </div>
@@ -531,7 +531,8 @@ function addView(arg) {
         <strong>${isFace ? 'Selfie aufnehmen oder wählen' : 'Foto aufnehmen oder wählen'}</strong>
         <p>${isFace ? 'Grimasse ziehen erwünscht. Der Hintergrund wird automatisch entfernt.' : 'Am besten flach auf einem ruhigen Untergrund, ganzes Teil im Bild. Der Hintergrund wird automatisch entfernt.'}</p>
       </label>
-      <p class="note">Oder ein schon freigestelltes Bild kopieren und hier einfügen.</p>
+      ${navigator.clipboard && navigator.clipboard.read ? `<button class="big secondary" data-act="pasteimg">Freigestelltes Bild einfügen</button>` : ''}
+      <p class="note">Bestes Freistellen am iPhone: In der Fotos-App lange aufs Teil drücken, „Kopieren“, dann hier „Einfügen“.</p>
       ${ADD.error ? `<p class="note warn" role="alert">${esc(ADD.error)}</p>` : ''}`;
   }
 
@@ -559,7 +560,7 @@ function addView(arg) {
   return `${head}${preview}${seg}${cutNote}
     <div class="card section">
       <div class="field"><label class="k" for="dname">Name</label><input class="text-input" id="dname" data-dfield="name" value="${esc(d.name)}" maxlength="80" placeholder="z. B. Strickpulli creme" autocomplete="off"></div>
-      <div class="field"><span class="k">Passt in Schicht ${d.slots.length ? '' : '<span class="warn">(mind. eine)</span>'}</span><div class="wrap">${slotPills}</div></div>
+      <div class="field"><span class="k">Kategorie ${d.slots.length ? '' : '<span class="warn">(mind. eine)</span>'}</span><div class="wrap">${slotPills}</div></div>
       <div class="field"><span class="k">Wetter</span><div class="wrap">${warmPills}<button class="pill ${d.rain ? 'on' : 'soft'}" data-act="drain" aria-pressed="${d.rain}">${I.rain}<span>regen ok</span></button></div></div>
       <div class="field"><span class="k">Farbe</span><div class="colorrow"><input type="color" value="${esc(d.color)}" data-dfield="color" aria-label="Farbe"><span class="muted" style="font-size:14px">automatisch erkannt</span></div></div>
       <div class="field"><label class="k" for="dbrand">Marke</label><input class="text-input" id="dbrand" data-dfield="brand" value="${esc(d.brand)}" maxlength="60" placeholder="optional"></div>
@@ -611,11 +612,18 @@ function render() {
     else if (view === 'add') html = addView(arg);
     else if (view === 'settings') html = settingsView();
     else html = gameView();
-    const key = view + ':' + arg;
+    const key = view === 'closet' ? 'closet' : view + ':' + arg;
     if (key !== lastView) { window.scrollTo(0, 0); confirmDel = null; }
     lastView = key;
   }
+  const keep = {};
+  app.querySelectorAll('[data-keep]').forEach((el) => { keep[el.dataset.keep] = el.scrollLeft; });
   app.innerHTML = html;
+  app.querySelectorAll('[data-keep]').forEach((el) => {
+    if (keep[el.dataset.keep] != null) { el.scrollLeft = keep[el.dataset.keep]; return; }
+    const on = el.querySelector('.on');
+    if (on) el.scrollLeft = on.offsetLeft - el.clientWidth / 2 + on.offsetWidth / 2;
+  });
   const tc = getComputedStyle(document.body).backgroundColor;
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && tc) meta.setAttribute('content', tc);
@@ -662,7 +670,7 @@ app.addEventListener('click', async (ev) => {
     case 'pslot': {
       const p = pieceById(id); if (!p) return;
       const next = p.slots.includes(slot) ? p.slots.filter((k) => k !== slot) : ORDER.filter((k) => p.slots.includes(k) || k === slot);
-      if (!next.length) { toast('Mindestens eine Schicht'); return; }
+      if (!next.length) { toast('Mindestens eine Kategorie'); return; }
       p.slots = next; render(); savePiece(p.id, { slots: next }); return;
     }
     case 'pwarm': { const p = pieceById(id); p.warmth = el.dataset.v; render(); savePiece(id, { warmth: p.warmth }); return; }
@@ -670,7 +678,7 @@ app.addEventListener('click', async (ev) => {
     case 'togame': {
       const p = pieceById(id); if (!p) return;
       const s = p.slots.find((k) => G.active.includes(k)) || p.slots[0];
-      if (!s) { toast('Erst eine Schicht wählen'); return; }
+      if (!s) { toast('Erst eine Kategorie wählen'); return; }
       if (!G.init) initGame();
       for (const k of G.active) if (k !== s && G.pick[k] === p.id) rollSlot(k);
       if (!G.active.includes(s)) G.active = ORDER.filter((k) => G.active.includes(k) || k === s);
@@ -699,6 +707,18 @@ app.addEventListener('click', async (ev) => {
     case 'drain': ADD.draft.rain = !ADD.draft.rain; render(); return;
     case 'addreset': resetAdd(ADD.kind === 'face' ? 'gesicht' : ADD.slot); render(); return;
     case 'addsave': await addSave(el.dataset.next === '1'); return;
+    case 'pasteimg':
+      try {
+        const items = await navigator.clipboard.read();
+        let blob = null;
+        for (const it of items) {
+          const type = it.types.find((t) => t.startsWith('image/'));
+          if (type) { blob = await it.getType(type); break; }
+        }
+        if (!blob) { toast('Kein Bild in der Zwischenablage'); return; }
+        startProcess(new File([blob], 'eingefuegt', { type: blob.type }), true);
+      } catch (e) { toast('Einfügen nicht erlaubt oder kein Bild kopiert'); }
+      return;
 
     case 'theme': setTheme(el.dataset.v); return;
     case 'setloc': {
@@ -825,11 +845,24 @@ let bgMod = null;
 async function removeBg(blob, onProgress) {
   if (!bgMod) bgMod = await import(BG_LIB);
   const fn = bgMod.removeBackground || (bgMod.default && bgMod.default.removeBackground) || bgMod.default;
-  const cfg = { progress: onProgress, output: { format: 'image/png' } };
-  try { return await fn(blob, { ...cfg, model: 'isnet_quint8' }); } catch (e) { return await fn(blob, cfg); }
+  // "small" ist schneller und braucht weniger Speicher (wichtig fürs iPhone)
+  return fn(blob, { progress: onProgress, model: 'small', output: { format: 'image/png' } });
 }
 function loadImg(src) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+async function hasAlpha(blob) {
+  try {
+    const img = await blobToImg(blob);
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 64;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, 64, 64);
+    const d = ctx.getImageData(0, 0, 64, 64).data;
+    let clear = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 200) clear++;
+    return clear > 64; // mehr als ein paar transparente Pixel
+  } catch (e) { return false; }
 }
 function toBlob(c, type, q) { return new Promise((r) => c.toBlob(r, type, q)); }
 async function blobToImg(blob) {
@@ -913,9 +946,9 @@ async function startProcess(file, pasted = false) {
     const small = await downscale(file, 1400);
     ADD.orig = { blob: small, url: URL.createObjectURL(small) };
     render();
-    // Eingefügte PNGs mit Transparenz direkt übernehmen
+    // Schon freigestellte Bilder (z. B. aus der Fotos-App kopiert) direkt übernehmen
     let cut = null;
-    if (pasted && file.type === 'image/png') {
+    if ((pasted || /png|webp/.test(file.type)) && await hasAlpha(file)) {
       try { cut = await finalize(file, true); } catch (e) { cut = null; }
     }
     if (!cut) {
@@ -929,7 +962,7 @@ async function startProcess(file, pasted = false) {
         cut = await finalize(raw, true);
       } catch (e) {
         console.warn('Freistellen fehlgeschlagen', e);
-        ADD.cutError = 'Freistellen hat nicht geklappt, deshalb siehst du das Original. Du kannst trotzdem speichern.';
+        ADD.cutError = `Automatisches Freistellen hat nicht geklappt (${(e && e.message ? e.message : String(e)).slice(0, 140)}). Tipp: In der Fotos-App lange aufs Teil drücken, „Kopieren“ und hier über „Einfügen“ reinholen.`;
       }
     }
     ADD.origRes = await finalize(small, false);
@@ -953,7 +986,7 @@ async function uploadImage(res) {
 async function addSave(next) {
   const res = ADD.useCut && ADD.cutRes ? ADD.cutRes : ADD.origRes;
   if (!res) return;
-  if (ADD.kind === 'piece' && !ADD.draft.slots.length) { toast('Wähl mindestens eine Schicht'); return; }
+  if (ADD.kind === 'piece' && !ADD.draft.slots.length) { toast('Wähl mindestens eine Kategorie'); return; }
   ADD.saving = true; render();
   try {
     const img = await uploadImage(res);
