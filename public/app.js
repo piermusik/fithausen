@@ -31,11 +31,15 @@ const BOX = {
   kopf: [32, -5, 36, 13, 10],
 };
 const CHIP_COLORS = { kopf: '#E4A0F7', schal: '#FF48B0', aussen: '#3E6B48', drueber: '#E8B04B', mitte: '#00A95C', basis: '#0078BF', hose: '#FF6C2F', schuhe: '#8B4A2B', tasche: '#C1502E' };
-const GHOSTS = ['rgba(255,72,176,.6)', 'rgba(0,120,191,.5)', 'rgba(255,214,0,.9)'];
+const VERSION = '3';
+const GHOSTS = ['rgba(255,72,176,.8)', 'rgba(33,64,212,.55)', 'rgba(255,232,0,.95)'];
+// Flugbahn beim Refresh/Shuffle: [dx, dy, Drehung, Verzögerung]
+const FLY = { hose: [-260, 80, -50, 0.04], schuhe: [220, 160, 70, 0.1], basis: [260, -60, 40, 0.16], mitte: [-260, -140, -35, 0.24], drueber: [240, -260, 60, 0.3], aussen: [0, -460, 25, 0.36], schal: [280, -240, 120, 0.44], tasche: [300, 40, -80, 0.4], kopf: [-120, -380, -140, 0.5] };
 const PAPERS = ['#CFE3F4', '#FFF3A6', '#FFD6EA', '#D6EEDC', '#FFE0C7', '#E4DDF5'];
 const TILTS = [-2.5, 1.5, -1, 2, -1.5, 1, 0.5, -2];
 const WARMTH = [['luftig', 'luftig'], ['mittel', 'mittel'], ['warm', 'warm']];
-const THEMES = [['grau', 'Hellgrau', '#DCDAD5', '#1A1A1A'], ['creme', 'Creme', '#F1EBDF', '#1A1A1A'], ['nacht', 'Nacht', '#141416', '#F2EFE8']];
+const THEMES = [['blau', 'Blau', '#2140D4', '#FFFFFF'], ['hell', 'Hell', '#E4E1DA', '#1A1A1A'], ['nacht', 'Nacht', '#121316', '#F2EFE8']];
+const normTheme = (t) => (THEMES.some(([k]) => k === t) ? t : 'blau');
 const DEFAULT_LOC = { name: 'Düsseldorf', region: 'Nordrhein-Westfalen, Deutschland', lat: 51.2277, lon: 6.7735 };
 const STALE_DAYS = 21;
 const BG_LIB = 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/+esm';
@@ -155,18 +159,49 @@ function wdesc(code, rain) {
   if (code >= 95) return 'Gewitter';
   return 'wechselhaft';
 }
-async function loadWeather() {
+async function loadWeather(silent = false) {
   const loc = S.settings.location || DEFAULT_LOC;
   try {
-    const u = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&timezone=auto&forecast_days=1`;
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}`
+      + '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m'
+      + '&hourly=temperature_2m,precipitation_probability,weather_code'
+      + '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code'
+      + '&timezone=auto&forecast_days=2';
     const d = await (await fetch(u)).json();
+    const rainy = (c) => (c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95;
     const code = d.daily.weather_code[0];
     const tmax = d.daily.temperature_2m_max[0];
-    const pp = d.daily.precipitation_probability_max[0] ?? 0;
-    const rainy = (c) => (c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95;
-    const rain = pp >= 50 || rainy(code) || rainy(d.current.weather_code);
+    const tmin = d.daily.temperature_2m_min[0];
+    const nowIso = d.current.time.slice(0, 13);
+    let i0 = d.hourly.time.findIndex((t) => t.slice(0, 13) === nowIso);
+    if (i0 < 0) i0 = 0;
+    const todayStr = d.current.time.slice(0, 10);
+    let rainFrom = null;
+    for (let i = i0; i < d.hourly.time.length && d.hourly.time[i].startsWith(todayStr); i++) {
+      if ((d.hourly.precipitation_probability[i] ?? 0) >= 50 || rainy(d.hourly.weather_code[i])) { rainFrom = Number(d.hourly.time[i].slice(11, 13)); break; }
+    }
+    const nowRain = rainy(d.current.weather_code);
+    const rain = nowRain || rainFrom !== null || (d.daily.precipitation_probability_max[0] ?? 0) >= 60;
     const feel = tmax < 11 ? 'kalt' : tmax > 21 ? 'warm' : 'mild';
-    S.weather = { temp: d.current.temperature_2m, tmax, tmin: d.daily.temperature_2m_min[0], rain, feel, code, desc: wdesc(code, rain), place: loc.name };
+    const strip = [0, 3, 6, 9].map((o) => {
+      const i = Math.min(i0 + o, d.hourly.time.length - 1);
+      return { h: Number(d.hourly.time[i].slice(11, 13)), t: Math.round(d.hourly.temperature_2m[i]), r: (d.hourly.precipitation_probability[i] ?? 0) >= 50 || rainy(d.hourly.weather_code[i]) };
+    });
+    let stamp;
+    if (nowRain) stamp = 'REGEN JETZT';
+    else if (rainFrom !== null) stamp = `REGEN AB ${rainFrom}H`;
+    else if (rain) stamp = 'SCHAUER MÖGLICH';
+    else if (feel === 'warm') stamp = 'WARM';
+    else stamp = code <= 1 ? 'SONNE' : 'TROCKEN';
+    const tips = [];
+    if (feel === 'kalt') tips.push(tmax < 5 ? 'Jacke, Schal, Mütze' : 'Jacke + Schal');
+    else if (feel === 'mild') tips.push('leichte Jacke');
+    else tips.push('luftig');
+    if (rain) tips.push('regenfest');
+    S.weather = {
+      temp: d.current.temperature_2m, feels: d.current.apparent_temperature, wind: d.current.wind_speed_10m,
+      tmax, tmin, rain, rainFrom, nowRain, feel, code, desc: wdesc(code, rain), place: loc.name, strip, stamp, tip: tips.join(', '),
+    };
     S.weatherFailed = false;
   } catch (e) {
     S.weather = null;
@@ -174,7 +209,7 @@ async function loadWeather() {
   }
   // Beim ersten Laden ohne Interaktion passend zum Wetter neu würfeln
   if (G.init && !G.touched && !todayWear()) shuffleAll(false);
-  if (route().view === 'game') render();
+  if (!silent && route().view === 'game' && !app.classList.contains('refreshing')) render();
 }
 function fits(p) {
   const w = S.weather;
@@ -292,7 +327,15 @@ function bodySVG() {
   </svg>`;
 }
 function topBar(left, mid, right) {
-  return `<header class="top">${left}<div class="top-mid">${mid}</div>${right}</header>`;
+  return `<header class="top ui">${left}<div class="top-mid">${mid}</div>${right}</header>`;
+}
+function issueNo() {
+  const d = new Date();
+  return Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5);
+}
+const kicker = (txt) => `<span class="kicker">Nº ${issueNo()} · ${esc(txt)}</span>`;
+function bigLogo() {
+  return `<div class="top-mid">${kicker('Kleiderschrank')}<h1 class="logo">fithausen</h1></div>`;
 }
 const backBtn = (href, label) => `<a class="iconbtn" href="${href}" aria-label="${esc(label)}">${I.back}</a>`;
 
@@ -300,17 +343,12 @@ const backBtn = (href, label) => `<a class="iconbtn" href="${href}" aria-label="
 // Views
 // ---------------------------------------------------------------------------
 function splashView() {
-  return `<div class="center"><h1 class="logo">fithausen</h1><p class="mono muted" style="font-size:12px">lädt …</p></div>`;
+  return `<div class="center ui">${bigLogo()}</div>`;
 }
 
 function loginView() {
   return `<div class="center">
-    <div class="collage-mini" aria-hidden="true">
-      <span style="left:8px;top:14px;width:80px;height:70px;background:#FFE800"></span>
-      <span style="left:62px;top:4px;width:70px;height:64px;background:#FF48B0;opacity:.85"></span>
-      <span style="left:44px;top:46px;width:86px;height:56px;background:#0078BF;opacity:.7"></span>
-    </div>
-    <h1 class="logo">fithausen</h1>
+    ${bigLogo()}
     <form class="card login" data-form="login">
       <label class="k" for="pw">Passwort</label>
       <input class="text-input" id="pw" name="password" type="password" autocomplete="current-password" required>
@@ -326,7 +364,7 @@ function errorView() {
   if (e.code === 'NO_DB') help = `<p>In Cloudflare unter <b>Workers &amp; Pages → fithausen → Einstellungen → Bindings</b> eine <b>D1-Datenbank</b> mit dem Variablennamen <code>DB</code> hinzufügen und neu deployen.</p>`;
   else if (e.code === 'NO_PASSWORD') help = `<p>In Cloudflare unter <b>Einstellungen → Variablen und Geheimnisse</b> die Variable <code>APP_PASSWORD</code> anlegen und neu deployen.</p>`;
   else help = `<p>${esc(e.message || 'Unbekannter Fehler')}</p>`;
-  return `<div class="center"><h1 class="logo">fithausen</h1><div class="card error-box"><p class="k">Setup fehlt noch</p>${help}<button class="big secondary" data-act="reload" style="margin-top:8px">Nochmal versuchen</button></div></div>`;
+  return `<div class="center">${bigLogo()}<div class="card error-box"><p class="k">Setup fehlt noch</p>${help}<button class="big secondary" data-act="reload" style="margin-top:8px">Nochmal versuchen</button></div></div>`;
 }
 
 // ----- Mini-Game -----
@@ -336,37 +374,51 @@ function gameView() {
   const w = S.weather;
   const hasPieces = S.pieces.length > 0;
 
-  const day = new Date().toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' }).replace(',', '').toUpperCase();
-  const wIcon = w ? (w.rain ? I.rain : w.code <= 1 ? I.sun : I.cloud) : I.cloud;
-  const wText = w ? `${day} · ${Math.round(w.temp)}° · ${w.desc}${G.wfilter ? '' : ' · Filter aus'}` : `${day} · ${S.weatherFailed ? 'Wetter offline' : 'Wetter lädt'}`;
-  const weatherBtn = `<button class="weather" data-act="wfilter" aria-pressed="${G.wfilter}" title="Wetter-Filter an/aus">${wIcon}<span>${esc(wText)}</span></button>`;
+  const now = new Date();
+  const dayLong = now.toLocaleDateString('de-DE', { weekday: 'long' }).toUpperCase();
+  const dateShort = `${now.getDate()}.${now.getMonth() + 1}.`;
+  const place = (S.settings.location || DEFAULT_LOC).name.toUpperCase();
+  const filterPill = `<button class="t-filter ${G.wfilter ? '' : 'off'}" data-act="wfilter" aria-pressed="${G.wfilter}" title="Klamotten nach Wetter filtern">${G.wfilter ? 'Filter an' : 'Filter aus'}</button>`;
+  let ticketBody;
+  if (w) {
+    ticketBody = `<span class="t-main"><span class="t-temp">${Math.round(w.temp)}°</span>
+        <span class="t-facts"><span>${Math.round(w.tmin)}–${Math.round(w.tmax)}° · gefühlt ${Math.round(w.feels)}°</span><span>Wind ${Math.round(w.wind)} km/h${w.rain ? '' : ' · ' + esc(w.desc)}</span><span class="t-tip">→ ${esc(w.tip)}</span></span>
+        <span class="t-stamp ${w.rain ? '' : 'dry'}">${esc(w.stamp)}</span></span>
+      ${G.wOpen ? `<span class="t-strip">${w.strip.map((x) => `<span class="${x.r ? 'r' : ''}">${x.h}h <b>${x.t}°</b></span>`).join('')}</span>` : ''}`;
+  } else {
+    ticketBody = `<span class="t-main"><span class="t-facts"><span>${S.weatherFailed ? 'Wetter gerade nicht erreichbar' : 'Wetter wird geladen …'}</span></span></span>`;
+  }
+  const weatherBtn = `<div class="ticket ui" style="--ud:.08s" data-act="wopen" role="button" tabindex="0" aria-expanded="${!!G.wOpen}" aria-label="Wetter, antippen für Tagesverlauf"><span class="tape" aria-hidden="true"></span>
+      <span class="t-head"><span>WETTER · ${dateShort} · ${esc(place)} <span aria-hidden="true">${G.wOpen ? '▴' : '▾'}</span></span>${filterPill}</span>${ticketBody}</div>`;
 
   const head = topBar(
     `<a class="iconbtn" href="#/schrank" aria-label="Schrank">${I.hanger}</a>`,
-    `<h1 class="logo"><button class="logo-btn" data-act="refresh" aria-label="fithausen, neu laden">fithausen</button></h1>`,
-    `<a class="iconbtn" href="#/einstellungen" aria-label="Einstellungen">${I.gear}</a>`
+    `${kicker(dayLong + ' ' + dateShort)}<h1 class="logo"><button class="logo-btn" data-act="refresh" aria-label="fithausen, neu laden">fithausen</button></h1>`,
+    `<a class="iconbtn y" href="#/einstellungen" aria-label="Einstellungen">${I.gear}</a>`
   );
 
   if (!hasPieces) {
-    return `${head}${weatherBtn}<div class="stage-wrap"><div class="stage"><div class="blob"></div>${bodySVG()}${faceHTML()}</div></div>
-      <div class="card empty"><strong>Dein Schrank ist noch leer</strong><p>Fotografier jedes Teil einmal, fithausen stellt es frei. Danach kannst du hier würfeln und kombinieren.</p><a class="big primary" href="#/neu">${I.camera}<span>Erstes Teil anlegen</span></a></div>`;
+    return `${head}${weatherBtn}<div class="stage-wrap"><div class="stage"><div class="blob ui"></div><div class="ui">${bodySVG()}</div>${faceHTML()}</div></div>
+      <div class="card empty ui"><strong>Dein Schrank ist noch leer</strong><p>Fotografier jedes Teil einmal, fithausen stellt es frei. Danach kannst du hier würfeln und kombinieren.</p><a class="big primary" href="#/neu">${I.camera}<span>Erstes Teil anlegen</span></a></div>`;
   }
 
   // Bühne
   const parts = G.active.map((k) => {
     const p = pieceById(G.pick[k]);
     const [x, y, wd, h, z] = BOX[k];
-    return `<button class="slot ${k === G.sel ? 'is-sel' : ''}" data-act="sel" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.6 : 0}deg" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
+    const [dx, dy, rot, dl] = FLY[k];
+    return `<button class="slot ${k === G.sel ? 'is-sel' : ''} ${G.held[k] && !S.flyAll ? 'held' : ''}" data-act="sel" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.6 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
   }).join('');
   const torso = TORSO.filter((k) => G.active.includes(k) && G.pick[k]);
   const covered = torso.slice(1);
-  const peeks = covered.length ? `<div class="peeks"><span class="peeks-lab">DRUNTER</span>${covered.map((k) => {
+  const peeks = covered.length ? `<div class="peeks ui" style="--ud:.3s"><span class="peeks-lab">DRUNTER</span>${covered.map((k) => {
     const p = pieceById(G.pick[k]);
     return `<button class="peek" data-act="sel" data-slot="${k}" aria-label="Drunter: ${esc(SLOT[k].label)}, ${esc(p.name)}">${cutHTML(p)}<small>${esc(SLOT[k].label)}</small></button>`;
   }).join('')}</div>` : '';
-  const stage = `<div class="stage-wrap"><div class="stage" id="stage"><div class="blob"></div>${bodySVG()}${parts}${faceHTML()}
-    <span class="tape" style="left:21%;top:20%;transform:rotate(-24deg)" aria-hidden="true"></span>
-    <span class="tape" style="right:21%;top:20%;transform:rotate(20deg)" aria-hidden="true"></span>${peeks}</div></div>`;
+  const flying = Date.now() < (S.flyUntil || 0);
+  const stage = `<div class="stage-wrap"><div class="stage ${flying ? 'fly' : ''}" id="stage"><div class="blob ui"></div><div class="ui" style="position:absolute;inset:0">${bodySVG()}</div>${parts}${faceHTML()}
+    <span class="tape ui" style="left:21%;top:20%;transform:rotate(-24deg);--ud:.25s" aria-hidden="true"></span>
+    <span class="tape ui" style="right:21%;top:20%;transform:rotate(20deg);--ud:.25s" aria-hidden="true"></span>${peeks}</div></div>`;
 
   // Karte zum gewählten Slot
   const sel = G.sel;
@@ -374,15 +426,15 @@ function gameView() {
   const n = cands(sel).length;
   let card;
   if (!sp) {
-    card = `<div class="card slotcard"><div class="slotcard-mid"><span class="lab">${esc(SLOT[sel].label)} · ${esc(SLOT[sel].long)}</span><strong>Noch nichts hier</strong><span class="sub">${n ? 'alle sind schon woanders am Avatar' : 'leg eins an'}</span></div><a class="pill blue" href="#/neu/${sel}">${I.plus}<span>Anlegen</span></a></div>`;
+    card = `<div class="card ui slotwrap" style="--ud:.12s"><div class="slotcard"><div class="slotcard-mid"><span class="lab">${esc(SLOT[sel].label)} · ${esc(SLOT[sel].long)}</span><strong>Noch nichts hier</strong><span class="sub">${n ? 'alle sind schon woanders am Avatar' : 'leg eins an'}</span></div><a class="pill blue" href="#/neu/${sel}">${I.plus}<span>Anlegen</span></a></div>{{ACTIONS}}</div>`;
   } else {
     const mismatch = !fits(sp);
     const sub = mismatch ? 'passt heute nicht zum Wetter' : `${wornText(sp)} · ${statOf(sp).count}×`;
-    card = `<div class="card slotcard">
+    card = `<div class="card pinkshadow ui slotwrap" style="--ud:.12s"><div class="slotcard">
       <button class="nav" data-act="step" data-dir="-1" aria-label="Vorheriges Teil">${I.left}</button>
       <div class="slotcard-mid"><span class="lab">${esc(SLOT[sel].label)} · ${n} ${n === 1 ? 'Teil' : 'Teile'}</span><strong>${esc(sp.name)}</strong><span class="sub ${mismatch || isStale(sp) ? 'warn' : ''}">${esc(sub)}</span></div>
       <button class="nav" data-act="step" data-dir="1" aria-label="Nächstes Teil">${I.right}</button>
-    </div>`;
+    </div>{{ACTIONS}}</div>`;
   }
   const held = !!G.held[sel];
   const actions = `<div class="actions">
@@ -401,7 +453,7 @@ function gameView() {
   const coldHint = w && G.wfilter && w.feel === 'kalt' && !G.active.includes('aussen') && cands('aussen').length
     ? `<button class="pill chip hint" data-act="addslot" data-slot="aussen">${I.plus}<span>Jacke? Ist kalt</span></button>` : '';
   const addBtn = inactive.length ? `<button class="pill chip dashed" data-act="addopen" aria-expanded="${G.addOpen}">${I.plus}<span>Dazu</span></button>` : '';
-  const addPanel = G.addOpen && inactive.length ? `<div class="card addpanel"><span class="mono">DAZUNEHMEN</span>${inactive.map((k) => `<button class="pill soft" data-act="addslot" data-slot="${k}">${esc(SLOT[k].label)} <span class="muted">${cands(k).length}</span></button>`).join('')}</div>` : '';
+  const addPanel = G.addOpen && inactive.length ? `<div class="card addpanel ui"><span class="mono">DAZUNEHMEN</span>${inactive.map((k) => `<button class="pill soft" data-act="addslot" data-slot="${k}">${esc(SLOT[k].label)} <span class="muted">${cands(k).length}</span></button>`).join('')}</div>` : '';
 
   // Heute an
   const tw = todayWear();
@@ -410,8 +462,9 @@ function gameView() {
     ? `<button class="big ok" data-act="wear">${I.check}<span>Gespeichert</span></button>`
     : `<button class="big secondary" data-act="wear">${tw ? 'Heute ändern' : 'Heute an'}</button>`;
 
-  return `${head}${weatherBtn}${stage}${card}${actions}<div class="row scroll-x" data-keep="chips">${chips}${coldHint}${addBtn}</div>${addPanel}
-    <div class="bottom"><button class="big primary" data-act="shuffle">${I.shuffle}<span>Shuffle</span></button>${wornBtn}</div>`;
+  card = card.replace('{{ACTIONS}}', actions);
+  return `${head}${weatherBtn}${stage}${card}<div class="row scroll-x ui" style="--ud:.2s" data-keep="chips">${chips}${coldHint}${addBtn}</div>${addPanel}
+    <div class="bottom sticky ui" style="--ud:.24s"><button class="big primary" data-act="shuffle">${I.shuffle}<span>Shuffle</span></button>${wornBtn}</div>`;
 }
 
 function faceHTML() {
@@ -419,15 +472,15 @@ function faceHTML() {
   const f = S.faces.find((ff) => ff.id === G.face);
   const idx = f ? S.faces.indexOf(f) + 1 : 0;
   const inner = f ? `<img class="cut" src="/api/images/${esc(f.image_id)}" alt="" draggable="false">` : faceDoodle();
-  const tag = f && S.faces.length > 1 ? `<span class="face-tag">FACE ${idx}/${S.faces.length}</span>` : '';
-  return `<button class="face" data-act="face" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%;z-index:${BOX.face[4]};transform:rotate(-3deg)" aria-label="${S.faces.length ? 'Anderes Gesicht' : 'Gesicht-Platzhalter, Gesichter in den Einstellungen hinzufügen'}">${inner}</button>${tag}`;
+  const tag = f && S.faces.length > 1 ? `<span class="face-tag ui">FACE ${idx}/${S.faces.length}</span>` : '';
+  return `<button class="face ui" data-act="face" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%;z-index:${BOX.face[4]};transform:rotate(-3deg)" aria-label="${S.faces.length ? 'Anderes Gesicht' : 'Gesicht-Platzhalter, Gesichter in den Einstellungen hinzufügen'}">${inner}</button>${tag}`;
 }
 
 // ----- Schrank -----
 function closetView(tabArg) {
   const tab = tabArg && (SLOT[tabArg] || tabArg === 'gesichter') ? tabArg : 'alle';
   CLOSET.tab = tab;
-  const head = topBar(backBtn('#/', 'Zurück zum Mini-Game'), `<h1 class="title">Schrank</h1><span class="mono muted" style="font-size:11px">${S.pieces.length} Teile</span>`,
+  const head = topBar(backBtn('#/', 'Zurück zum Mini-Game'), `${kicker(S.pieces.length + ' Teile')}<h1 class="title">Schrank</h1>`,
     `<a class="iconbtn" href="#/neu/${tab === 'gesichter' ? 'gesicht' : tab === 'alle' ? '' : tab}" aria-label="Neu hinzufügen">${I.plus}</a>`);
   const tabs = [['alle', 'Alle'], ...SLOT_DEFS.map((s) => [s.key, s.label]), ['gesichter', 'Gesichter']]
     .map(([k, l]) => `<a class="pill ${k === tab ? 'on' : ''}" href="#/schrank/${k}" aria-current="${k === tab ? 'page' : 'false'}">${esc(l)}</a>`).join('');
@@ -442,31 +495,31 @@ function closetView(tabArg) {
   if (CLOSET.filter === 'nie') list = list.filter((p) => statOf(p).count === 0);
   list.sort((a, b) => { const la = statOf(a).last || '0000', lb = statOf(b).last || '0000'; return la < lb ? -1 : la > lb ? 1 : 0; });
 
-  const tiles = list.map((p) => {
+  const tiles = list.map((p, i) => {
     const stale = isStale(p);
-    return `<a class="tile" href="#/teil/${p.id}">${paperHTML(p, '', stale ? `<span class="badge">${statOf(p).count ? 'lange nicht' : 'neu'}</span>` : '')}
+    return `<a class="tile" style="--i:${i}" href="#/teil/${p.id}">${paperHTML(p, '', stale ? `<span class="badge">${statOf(p).count ? 'lange nicht' : 'neu'}</span>` : '')}
       <span class="tile-name">${esc(p.name)}</span><span class="sub ${stale && statOf(p).count ? 'warn' : ''}">${esc(wornText(p))} · ${statOf(p).count}×</span></a>`;
   }).join('');
-  const newTile = `<a class="newtile" href="#/neu/${tab === 'alle' ? '' : tab}"><span class="iconbtn">${I.camera}</span><span>Neues Teil</span></a>`;
-  const longLine = tab === 'alle' ? '' : `<p class="mono muted" style="margin:0;font-size:12px;text-align:center">${esc(SLOT[tab].long)}</p>`;
+  const newTile = `<a class="newtile" style="--i:${list.length}" href="#/neu/${tab === 'alle' ? '' : tab}"><span class="iconbtn">${I.camera}</span><span>Neues Teil</span></a>`;
+  const longLine = tab === 'alle' ? '' : `<p class="subtitle">${esc(SLOT[tab].long)}</p>`;
   const empty = !list.length && CLOSET.filter !== 'alle' ? `<div class="card empty"><p>Nichts in diesem Filter.</p></div>` : '';
   return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${longLine}<div class="row scroll-x" data-keep="filters">${filters}</div>${empty}<div class="grid">${tiles}${newTile}</div>`;
 }
 
 function facesGrid() {
-  const tiles = S.faces.map((f, i) => `<div class="paper facetile" style="--p:${PAPERS[i % PAPERS.length]}"><div class="inner" style="--r:${TILTS[i % TILTS.length]}deg"><img class="cut" style="--g:${GHOSTS[i % 3]}" src="/api/images/${esc(f.image_id)}" alt="Gesicht ${i + 1}"></div><button class="del" data-act="delface" data-id="${f.id}" aria-label="Gesicht ${i + 1} löschen">${I.x}</button></div>`).join('');
+  const tiles = S.faces.map((f, i) => `<div class="paper facetile" style="--p:${PAPERS[i % PAPERS.length]};--i:${i}"><div class="inner" style="--r:${TILTS[i % TILTS.length]}deg"><img class="cut" style="--g:${GHOSTS[i % 3]}" src="/api/images/${esc(f.image_id)}" alt="Gesicht ${i + 1}"></div><button class="del" data-act="delface" data-id="${f.id}" aria-label="Gesicht ${i + 1} löschen">${I.x}</button></div>`).join('');
   return `<p class="note">Bei jedem Shuffle kriegt der Avatar eins davon. Je mehr Grimassen, desto besser.</p>
-    <div class="faces">${tiles}<a class="newtile" style="min-height:0;aspect-ratio:1" href="#/neu/gesicht"><span class="iconbtn">${I.camera}</span><span>Gesicht</span></a></div>`;
+    <div class="faces">${tiles}<a class="newtile" style="min-height:0;aspect-ratio:1;--i:${S.faces.length}" href="#/neu/gesicht"><span class="iconbtn">${I.camera}</span><span>Gesicht</span></a></div>`;
 }
 
 // ----- Teil-Detail -----
 function pieceView(id) {
   const p = pieceById(id);
-  if (!p) return `${topBar(backBtn('#/schrank', 'Zurück'), '<h1 class="title">Nicht gefunden</h1>', '<span class="spacer"></span>')}<div class="card empty"><p>Dieses Teil gibt es nicht mehr.</p></div>`;
+  if (!p) return `${topBar(backBtn('#/schrank', 'Zurück'), `${kicker('Schrank')}<h1 class="title">Weg</h1>`, '<span class="spacer"></span>')}<div class="card empty"><p>Dieses Teil gibt es nicht mehr.</p></div>`;
   const s = statOf(p);
   const mainSlot = p.slots[0];
   const head = topBar(backBtn(`#/schrank/${mainSlot || 'alle'}`, 'Zurück zum Schrank'),
-    `<span class="mono muted" style="font-size:12px">${esc(p.slots.map((k) => SLOT[k]?.label).filter(Boolean).join(' · ') || 'ohne Kategorie')}</span>`,
+    `${kicker(p.slots.map((k) => SLOT[k]?.label).filter(Boolean).join(' · ') || 'ohne Kategorie')}<h1 class="title">Teil</h1>`,
     `<span class="spacer"></span>`);
   const hero = paperHTML(p, 'hero', `<span class="tape l" aria-hidden="true"></span><span class="tape r" aria-hidden="true"></span>
     <label class="hero-btn">${I.camera}<span>Foto ändern</span><input class="sr" type="file" accept="image/*" data-file="replace" data-id="${p.id}"></label>`);
@@ -494,7 +547,7 @@ function pieceView(id) {
 
   return `${head}${hero}
     <div><input class="name-input" value="${esc(p.name)}" data-pfield="name" data-id="${p.id}" aria-label="Name" maxlength="80">
-      <p class="sub ${isStale(p) && s.count ? 'warn' : ''}" style="margin:2px 0 0">${esc(wornText(p))}${p.brand ? ' · ' + esc(p.brand) : ''}</p></div>
+      <p class="name-sub">${esc(wornText(p))}${p.brand ? ' · ' + esc(p.brand) : ''}</p></div>
     <div class="card stats"><div><span class="k">Getragen</span><b>${s.count}×</b></div><div><span class="k">Zuletzt</span><b>${fmtDate(s.last)}</b></div><div><span class="k">Dabei seit</span><b>${fmtDate((p.created_at || '').slice(0, 10))}</b></div></div>
     <div class="card section">
       <div class="field"><span class="k">Kategorie</span><div class="wrap">${slotPills}</div></div>
@@ -522,17 +575,18 @@ function addView(arg) {
   if (!ADD) resetAdd(arg);
   const isFace = ADD.kind === 'face';
   const backHref = isFace ? '#/schrank/gesichter' : `#/schrank/${ADD.slot || 'alle'}`;
-  const head = topBar(backBtn(backHref, 'Abbrechen'), `<h1 class="title">${isFace ? 'Neues Gesicht' : 'Neues Teil'}</h1>${ADD.slot ? `<span class="mono muted" style="font-size:11px">${esc(SLOT[ADD.slot].long)}</span>` : ''}`, '<span class="spacer"></span>');
+  const head = topBar(backBtn(backHref, 'Abbrechen'), `${kicker(isFace ? 'Gesichter' : ADD.slot ? SLOT[ADD.slot].label : 'Schrank')}<h1 class="title">${isFace ? 'Neues Gesicht' : 'Neues Teil'}</h1>`, '<span class="spacer"></span>');
 
   if (ADD.step === 'pick') {
-    return `${head}<label class="drop card">
+    return `${head}<label class="drop">
         <input type="file" accept="image/*" data-file="add" aria-label="Foto auswählen">
         <span class="iconbtn">${I.camera}</span>
         <strong>${isFace ? 'Selfie aufnehmen oder wählen' : 'Foto aufnehmen oder wählen'}</strong>
         <p>${isFace ? 'Grimasse ziehen erwünscht. Der Hintergrund wird automatisch entfernt.' : 'Am besten flach auf einem ruhigen Untergrund, ganzes Teil im Bild. Der Hintergrund wird automatisch entfernt.'}</p>
       </label>
       ${navigator.clipboard && navigator.clipboard.read ? `<button class="big secondary" data-act="pasteimg">Freigestelltes Bild einfügen</button>` : ''}
-      <p class="note">Bestes Freistellen am iPhone: In der Fotos-App lange aufs Teil drücken, „Kopieren“, dann hier „Einfügen“.</p>
+      <div class="pastezone" contenteditable="true" data-pastezone aria-label="Freigestelltes Bild hier einfügen">Hier lange drücken → Einfügen</div>
+      <p class="note">Bestes Freistellen: In der Galerie bzw. Fotos-App lange aufs Teil drücken, „Kopieren“, dann hier einfügen.</p>
       ${ADD.error ? `<p class="note warn" role="alert">${esc(ADD.error)}</p>` : ''}`;
   }
 
@@ -571,8 +625,8 @@ function addView(arg) {
 // ----- Einstellungen -----
 function settingsView() {
   const loc = S.settings.location || DEFAULT_LOC;
-  const theme = document.documentElement.dataset.theme || 'grau';
-  const head = topBar(backBtn('#/', 'Zurück'), '<h1 class="title">Einstellungen</h1>', '<span class="spacer"></span>');
+  const theme = normTheme(document.documentElement.dataset.theme);
+  const head = topBar(backBtn('#/', 'Zurück'), `${kicker('Setup')}<h1 class="title">Einstellungen</h1>`, '<span class="spacer"></span>');
   return `${head}
     <div class="card section">
       <div class="field"><span class="k">Standort fürs Wetter</span><strong>${esc(loc.name)}</strong><span class="muted" style="font-size:13px">${esc(loc.region || '')}</span></div>
@@ -586,7 +640,7 @@ function settingsView() {
       <a class="pill soft" href="#/schrank/gesichter" style="justify-content:flex-start">${I.camera}<span>Gesichter verwalten (${S.faces.length})</span></a>
       <button class="pill soft" data-act="logout" style="justify-content:flex-start">${I.x}<span>Abmelden</span></button>
     </div>
-    <p class="note">fithausen · ${S.pieces.length} Teile · ${S.wears.length} Outfits geloggt</p>`;
+    <p class="note">fithausen · Version ${VERSION} · ${S.pieces.length} Teile · ${S.wears.length} Outfits geloggt</p>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -597,6 +651,16 @@ function route() {
   const [, view = '', arg = ''] = h.split('/');
   const map = { '': 'game', schrank: 'closet', teil: 'piece', neu: 'add', einstellungen: 'settings' };
   return { view: map[view] || 'game', arg: decodeURIComponent(arg) };
+}
+
+function bubbleIn(view) {
+  const origins = { closet: '12% 0%', settings: '88% 0%', piece: '50% 20%', add: '50% 20%', game: '50% 30%' };
+  app.style.setProperty('--origin', origins[view] || '50% 0%');
+  app.classList.remove('enter');
+  void app.offsetWidth;
+  app.classList.add('enter');
+  clearTimeout(bubbleIn._t);
+  bubbleIn._t = setTimeout(() => app.classList.remove('enter'), 750);
 }
 
 function render() {
@@ -613,7 +677,10 @@ function render() {
     else if (view === 'settings') html = settingsView();
     else html = gameView();
     const key = view === 'closet' ? 'closet' : view + ':' + arg;
-    if (key !== lastView) { window.scrollTo(0, 0); confirmDel = null; }
+    if (key !== lastView) {
+      window.scrollTo(0, 0); confirmDel = null;
+      if (lastView && !app.classList.contains('refreshing')) bubbleIn(view);
+    }
     lastView = key;
   }
   const keep = {};
@@ -651,7 +718,7 @@ app.addEventListener('click', async (ev) => {
 
   switch (act) {
     case 'reload': location.reload(); return;
-    case 'refresh': el.classList.add('spin'); setTimeout(() => location.reload(), 250); return;
+    case 'refresh': refresh(); return;
     case 'sel': G.sel = slot; G.addOpen = false; render(); return;
     case 'step': step(Number(el.dataset.dir)); return;
     case 'roll': rollSlot(G.sel); G.touched = true; render(); return;
@@ -663,8 +730,9 @@ app.addEventListener('click', async (ev) => {
       if (!G.active.includes(slot)) G.active = ORDER.filter((k) => G.active.includes(k) || k === slot);
       rollSlot(slot); G.sel = slot; G.addOpen = false; G.touched = true; render(); return;
     case 'face': rollFace(); G.touched = true; render(); return;
-    case 'shuffle': shuffleAll(true); G.touched = true; render(); return;
+    case 'shuffle': shuffleAll(true); G.touched = true; S.flyUntil = Date.now() + 1300; render(); return;
     case 'wfilter': G.wfilter = !G.wfilter; render(); return;
+    case 'wopen': G.wOpen = !G.wOpen; render(); return;
     case 'wear': await wearToday(); return;
 
     case 'cfilter': CLOSET.filter = el.dataset.f; render(); return;
@@ -748,6 +816,13 @@ app.addEventListener('input', (ev) => {
     debounce('p' + p.id + f, () => savePiece(p.id, { [f]: el.value }), f === 'color' ? 400 : 700);
   } else if (el.dataset.dfield) {
     ADD.draft[el.dataset.dfield] = el.value;
+  } else if ('pastezone' in el.dataset) {
+    // Manche Browser fügen das Bild direkt als <img> ein
+    const img = el.querySelector('img');
+    if (img && img.src) {
+      fetch(img.src).then((r) => r.blob()).then((b) => startProcess(new File([b], 'eingefuegt', { type: b.type || 'image/png' }), true)).catch(() => toast('Bild konnte nicht gelesen werden'));
+    }
+    el.innerHTML = '';
   } else if ('locsearch' in el.dataset) {
     const q = el.value.trim();
     debounce('loc', () => searchLoc(q), 350);
@@ -823,6 +898,7 @@ async function wearToday() {
 }
 
 function setTheme(t) {
+  t = normTheme(t);
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('fh-theme', t); } catch (e) { /* privat */ }
   S.settings.theme = t;
@@ -1056,22 +1132,55 @@ async function replacePhoto(id, file) {
 }
 
 // ---------------------------------------------------------------------------
-// Start
+// Start & Refresh
 // ---------------------------------------------------------------------------
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+function applyState(d) {
+  S.pieces = d.pieces; S.wears = d.wears; S.faces = d.faces; S.settings = d.settings || {};
+  const t = normTheme(S.settings.theme || (() => { try { return localStorage.getItem('fh-theme'); } catch (e) { return null; } })());
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('fh-theme', t); } catch (e) { /* privat */ }
+}
+// Klamotten fliegen ein, danach kommt der Rest der Oberfläche zurück
+async function landing() {
+  S.flyUntil = Date.now() + 1300;
+  S.flyAll = true;
+  render();
+  await wait(route().view === 'game' ? 950 : 150);
+  S.flyAll = false;
+  app.classList.remove('refreshing');
+}
+let refreshing = false;
+async function refresh() {
+  if (refreshing) return;
+  refreshing = true;
+  app.classList.add('refreshing');
+  const t0 = Date.now();
+  try {
+    const [d, v] = await Promise.all([
+      api('/state'),
+      fetch('/version.json', { cache: 'no-store' }).then((r) => r.json()).catch(() => null),
+      loadWeather(true),
+    ]);
+    if (v && v.v && v.v !== VERSION) { location.reload(); return; }
+    applyState(d);
+  } catch (e) { /* offline: einfach weiter */ }
+  await wait(Math.max(0, 450 - (Date.now() - t0)));
+  await landing();
+  refreshing = false;
+}
 async function boot() {
+  app.classList.add('refreshing');
   try {
     const d = await api('/state');
-    S.pieces = d.pieces; S.wears = d.wears; S.faces = d.faces; S.settings = d.settings || {};
-    if (S.settings.theme) {
-      document.documentElement.dataset.theme = S.settings.theme;
-      try { localStorage.setItem('fh-theme', S.settings.theme); } catch (e) { /* privat */ }
-    }
+    applyState(d);
     S.phase = 'ready';
     const r = route();
     if (r.view === 'add') resetAdd(r.arg);
-    render();
-    loadWeather();
+    await loadWeather(true);
+    await landing();
   } catch (e) {
+    app.classList.remove('refreshing');
     if (e.status === 401) S.phase = 'login';
     else { S.phase = 'error'; S.err = e; }
     render();
