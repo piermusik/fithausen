@@ -343,13 +343,13 @@ function gameView() {
 
   const head = topBar(
     `<a class="iconbtn" href="#/schrank" aria-label="Schrank">${I.hanger}</a>`,
-    `<h1 class="logo">fithausen</h1>`,
+    `<h1 class="logo"><button class="logo-btn" data-act="refresh" aria-label="fithausen, neu laden">fithausen</button></h1>`,
     `<a class="iconbtn" href="#/einstellungen" aria-label="Einstellungen">${I.gear}</a>`
   );
 
   if (!hasPieces) {
     return `${head}${weatherBtn}<div class="stage-wrap"><div class="stage"><div class="blob"></div>${bodySVG()}${faceHTML()}</div></div>
-      <div class="card empty"><strong>Dein Schrank ist noch leer</strong><p>Fotografier jedes Teil einmal, fithausen stellt es frei. Danach kannst du hier würfeln und kombinieren.</p><a class="big primary" href="#/neu" style="width:100%">${I.camera}<span>Erstes Teil anlegen</span></a></div>`;
+      <div class="card empty"><strong>Dein Schrank ist noch leer</strong><p>Fotografier jedes Teil einmal, fithausen stellt es frei. Danach kannst du hier würfeln und kombinieren.</p><a class="big primary" href="#/neu">${I.camera}<span>Erstes Teil anlegen</span></a></div>`;
   }
 
   // Bühne
@@ -385,11 +385,11 @@ function gameView() {
     </div>`;
   }
   const held = !!G.held[sel];
-  const actions = `<div class="row scroll-x" data-keep="actions">
-    <button class="pill" data-act="roll" ${n ? '' : 'disabled'}>${I.dice}<span>Würfeln</span></button>
-    <button class="pill ${held ? 'blue' : ''}" data-act="hold" aria-pressed="${held}">${I.pin}<span>${held ? 'Festgehalten' : 'Festhalten'}</span></button>
-    ${SLOT[sel].required ? '' : `<button class="pill" data-act="drop">${I.x}<span>Weglassen</span></button>`}
-    ${sp ? `<a class="pill" href="#/teil/${sp.id}" aria-label="Details zu ${esc(sp.name)}">${I.info}</a>` : ''}
+  const actions = `<div class="actions">
+    <button class="act" data-act="roll" ${n ? '' : 'disabled'}>${I.dice}<span>Würfeln</span></button>
+    <button class="act ${held ? 'on' : ''}" data-act="hold" aria-pressed="${held}">${I.pin}<span>${held ? 'Fest' : 'Festhalten'}</span></button>
+    <button class="act" data-act="drop" ${SLOT[sel].required ? 'disabled' : ''}>${I.x}<span>Weglassen</span></button>
+    ${sp ? `<a class="act" href="#/teil/${sp.id}">${I.info}<span>Details</span></a>` : `<span class="act" aria-hidden="true"></span>`}
   </div>`;
 
   // Schicht-Chips
@@ -620,9 +620,13 @@ function render() {
   app.querySelectorAll('[data-keep]').forEach((el) => { keep[el.dataset.keep] = el.scrollLeft; });
   app.innerHTML = html;
   app.querySelectorAll('[data-keep]').forEach((el) => {
-    if (keep[el.dataset.keep] != null) { el.scrollLeft = keep[el.dataset.keep]; return; }
+    if (keep[el.dataset.keep] != null) el.scrollLeft = keep[el.dataset.keep];
     const on = el.querySelector('.on');
-    if (on) el.scrollLeft = on.offsetLeft - el.clientWidth / 2 + on.offsetWidth / 2;
+    if (!on) return;
+    const left = on.offsetLeft - el.offsetLeft;
+    if (left < el.scrollLeft || left + on.offsetWidth > el.scrollLeft + el.clientWidth) {
+      el.scrollLeft = left - el.clientWidth / 2 + on.offsetWidth / 2;
+    }
   });
   const tc = getComputedStyle(document.body).backgroundColor;
   const meta = document.querySelector('meta[name="theme-color"]');
@@ -647,6 +651,7 @@ app.addEventListener('click', async (ev) => {
 
   switch (act) {
     case 'reload': location.reload(); return;
+    case 'refresh': el.classList.add('spin'); setTimeout(() => location.reload(), 250); return;
     case 'sel': G.sel = slot; G.addOpen = false; render(); return;
     case 'step': step(Number(el.dataset.dir)); return;
     case 'roll': rollSlot(G.sel); G.touched = true; render(); return;

@@ -135,7 +135,7 @@ img { display: block; }
 .stage-wrap { position: relative; display: flex; justify-content: center; margin-top: 2px; }
 .stage {
   position: relative;
-  width: min(76vw, 300px);
+  width: min(76vw, 300px, 40vh);
   aspect-ratio: 3 / 4;
   touch-action: pan-y;
   user-select: none;
@@ -291,13 +291,15 @@ img { display: block; }
 
 .bottom { display: flex; gap: 10px; margin-top: auto; padding-top: 4px; }
 .big {
-  flex: 1; height: 56px;
+  flex: none; height: 54px; padding: 0 16px;
   border: none; border-radius: 18px;
-  font-size: 17px; font-weight: 800;
+  font-size: 16px; font-weight: 800; line-height: 1.15; text-align: center;
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  text-decoration: none;
+  text-decoration: none; white-space: nowrap;
 }
-.big svg { width: 20px; height: 20px; }
+.bottom .big { flex: 1 1 0; min-width: 0; }
+.empty .big { align-self: stretch; }
+.big svg { width: 20px; height: 20px; flex-shrink: 0; }
 .big.primary { background: #0078BF; color: #FFFFFF; }
 .big.secondary { background: var(--card); box-shadow: var(--shadow); }
 .big.ok { background: var(--ok-bg); color: var(--ok-ink); }
@@ -479,4 +481,31 @@ img { display: block; }
 @media (prefers-reduced-motion: reduce) {
   .processing .scan { animation: none; top: 30%; }
   #toast { transition: none; }
+}
+
+/* ---------- Feinschliff ---------- */
+.logo-btn { all: unset; cursor: pointer; display: inline-block; transition: transform .25s; }
+.logo-btn:focus-visible { outline: 2px solid #0078BF; outline-offset: 4px; border-radius: 6px; }
+.logo-btn.spin { transform: rotate(-6deg) scale(.94); }
+.actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.act {
+  height: 54px; border: none; border-radius: 14px;
+  background: var(--card); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 12px; font-weight: 700; text-decoration: none; color: inherit;
+}
+.act svg { width: 18px; height: 18px; }
+.act.on { background: #0078BF; color: #FFFFFF; box-shadow: none; }
+.act:disabled { opacity: .35; }
+span.act { background: transparent; box-shadow: none; }
+.peeks { left: -10px; top: 34%; }
+.peek small { max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
+.slotcard-mid strong { font-size: 17px; }
+.chip { font-size: 14px; padding: 0 14px; }
+@media (max-width: 380px) {
+  #app { padding-left: 12px; padding-right: 12px; gap: 10px; }
+  .logo { font-size: 22px; }
+  .big { font-size: 15px; }
+  .weather { font-size: 11px; padding: 0 12px; }
+  .tile .paper { height: 130px; }
 }
