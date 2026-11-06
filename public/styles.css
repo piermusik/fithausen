@@ -534,7 +534,7 @@ span.act { background: transparent; border-color: transparent; }
 /* ---------- v5 ---------- */
 .stage, .stage img, .peek img { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .slot { transition: opacity .2s ease; }
-.slot .cut, .slot .swatch { object-position: var(--op, 50% 50%); transform: translateY(calc(var(--fy, 0) * 1%)) scale(var(--fs, 1)); transform-origin: var(--op, 50% 50%); }
+.slot .cut, .slot .swatch { object-position: var(--op, 50% 50%); transform: translate(calc(var(--fx, 0) * 1%), calc(var(--fy, 0) * 1%)) scale(var(--fs, 1)); transform-origin: var(--op, 50% 50%); }
 .stage.onion .slot.over { opacity: .14; }
 .stage.onion .slot.is-sel::after { opacity: 0; }
 .hold-hint { font-family: 'Space Mono', monospace; font-size: 10px; font-weight: 700; color: var(--on-bg-muted); letter-spacing: .4px; }

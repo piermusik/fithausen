@@ -248,8 +248,9 @@ function cleanPiece(b) {
   if ('fit' in b) {
     const f = b.fit && typeof b.fit === 'object' ? b.fit : {};
     const sc = Math.min(1.8, Math.max(0.5, Number(f.s) || 1));
+    const x = Math.min(25, Math.max(-25, Number(f.x) || 0));
     const y = Math.min(25, Math.max(-25, Number(f.y) || 0));
-    o.fit = JSON.stringify({ s: Math.round(sc * 100) / 100, y: Math.round(y) });
+    o.fit = JSON.stringify({ s: Math.round(sc * 100) / 100, x: Math.round(x), y: Math.round(y) });
   }
   if ('rain' in b) o.rain = b.rain ? 1 : 0;
   if ('brand' in b) o.brand = str(b.brand, 60);

@@ -33,7 +33,7 @@ const BOX = {
 // Wo das Bild in seinem Feld klebt: Oberteile und Hosen oben bündig, Schuhe unten
 const ANCHOR = { hose: '50% 0%', schuhe: '50% 100%', basis: '50% 0%', mitte: '50% 0%', drueber: '50% 0%', aussen: '50% 0%', schal: '50% 0%', tasche: '50% 50%', kopf: '50% 100%' };
 const CHIP_COLORS = { kopf: '#E4A0F7', schal: '#FF48B0', aussen: '#3E6B48', drueber: '#E8B04B', mitte: '#00A95C', basis: '#0078BF', hose: '#FF6C2F', schuhe: '#8B4A2B', tasche: '#C1502E' };
-const VERSION = '5';
+const VERSION = '6';
 const GHOSTS = ['rgba(255,72,176,.8)', 'rgba(33,64,212,.55)', 'rgba(255,232,0,.95)'];
 // Flugbahn beim Refresh/Shuffle: [dx, dy, Drehung, Verzögerung]
 const FLY = { hose: [-260, 80, -50, 0.04], schuhe: [220, 160, 70, 0.1], basis: [260, -60, 40, 0.16], mitte: [-260, -140, -35, 0.24], drueber: [240, -260, 60, 0.3], aussen: [0, -460, 25, 0.36], schal: [280, -240, 120, 0.44], tasche: [300, 40, -80, 0.4], kopf: [-120, -380, -140, 0.5] };
@@ -54,7 +54,7 @@ function toggleTemp(arr, k) {
   const next = arr.includes(k) ? arr.filter((x) => x !== k) : [...arr, k];
   return next.length ? next : null;
 }
-const fitOf = (p) => ({ s: (p && p.fit && p.fit.s) || 1, y: (p && p.fit && p.fit.y) || 0 });
+const fitOf = (p) => ({ s: (p && p.fit && p.fit.s) || 1, x: (p && p.fit && p.fit.x) || 0, y: (p && p.fit && p.fit.y) || 0 });
 const THEMES = [['blau', 'Blau', '#2140D4', '#FFFFFF'], ['hell', 'Hell', '#E4E1DA', '#1A1A1A'], ['nacht', 'Nacht', '#121316', '#F2EFE8']];
 const normTheme = (t) => (THEMES.some(([k]) => k === t) ? t : 'blau');
 const DEFAULT_LOC = { name: 'Düsseldorf', region: 'Nordrhein-Westfalen, Deutschland', lat: 51.2277, lon: 6.7735 };
@@ -331,7 +331,7 @@ function slotHTML(k, p, o = {}) {
   const [dx, dy, rot, dl] = FLY[k];
   const f = fitOf(p);
   const cls = ['slot', o.sel ? 'is-sel' : '', o.held ? 'held' : '', o.over ? 'over' : ''].join(' ');
-  return `<button class="${cls}" data-act="${o.act || 'sel'}" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.5 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s;--op:${ANCHOR[k] || '50% 50%'};--fs:${f.s};--fy:${f.y}" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
+  return `<button class="${cls}" data-act="${o.act || 'sel'}" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.5 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s;--op:${ANCHOR[k] || '50% 50%'};--fs:${f.s};--fx:${f.x};--fy:${f.y}" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
 }
 // Großes Bild mit Klebeband, das wirklich am Bild klebt
 function pinHero(src, opts = {}) {
@@ -559,6 +559,7 @@ function pieceView(id) {
     <div class="fitrow"><div class="fitstage stage" id="fitstage"><div class="blob"></div>${bodySVG()}${slotHTML(fitSlot, p, { act: 'none' })}</div>
     <div class="fitctl"><label class="k" for="fs">Größe</label><input id="fs" type="range" min="50" max="180" step="2" value="${Math.round(f.s * 100)}" data-fit="s" data-id="${p.id}">
       <label class="k" for="fy">Höhe</label><input id="fy" type="range" min="-25" max="25" step="1" value="${-f.y}" data-fit="y" data-id="${p.id}">
+      <label class="k" for="fx">Links / rechts</label><input id="fx" type="range" min="-25" max="25" step="1" value="${f.x}" data-fit="x" data-id="${p.id}">
       <button class="pill soft" data-act="fitreset" data-id="${p.id}">Zurücksetzen</button></div></div></div>`;
 
   const slotPills = SLOT_DEFS.map((d) => `<button class="pill ${p.slots.includes(d.key) ? 'on' : 'soft'}" data-act="pslot" data-id="${p.id}" data-slot="${d.key}" aria-pressed="${p.slots.includes(d.key)}">${esc(d.label)}</button>`).join('');
@@ -804,7 +805,7 @@ app.addEventListener('click', async (ev) => {
     }
     case 'fitreset': {
       const p = pieceById(id); if (!p) return;
-      p.fit = { s: 1, y: 0 }; render(); savePiece(id, { fit: p.fit }); return;
+      p.fit = { s: 1, x: 0, y: 0 }; render(); savePiece(id, { fit: p.fit }); return;
     }
     case 'pastereplace':
       try {
@@ -883,10 +884,12 @@ app.addEventListener('input', (ev) => {
   } else if (el.dataset.fit) {
     const p = pieceById(el.dataset.id); if (!p) return;
     const f = fitOf(p);
-    if (el.dataset.fit === 's') f.s = Number(el.value) / 100; else f.y = -Number(el.value);
+    if (el.dataset.fit === 's') f.s = Number(el.value) / 100;
+    else if (el.dataset.fit === 'x') f.x = Number(el.value);
+    else f.y = -Number(el.value);
     p.fit = f;
     const sl = document.querySelector('#fitstage .slot');
-    if (sl) { sl.style.setProperty('--fs', f.s); sl.style.setProperty('--fy', f.y); }
+    if (sl) { sl.style.setProperty('--fs', f.s); sl.style.setProperty('--fx', f.x); sl.style.setProperty('--fy', f.y); }
     debounce('fit' + p.id, () => savePiece(p.id, { fit: f }), 500);
   } else if (el.dataset.dfield) {
     ADD.draft[el.dataset.dfield] = el.value;
