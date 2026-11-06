@@ -2,7 +2,7 @@
 // Braucht: D1-Binding "DB" und Umgebungsvariable "APP_PASSWORD".
 
 const SLOTS = ['kopf', 'schal', 'aussen', 'drueber', 'mitte', 'basis', 'hose', 'schuhe', 'tasche'];
-const WARMTH = ['luftig', 'mittel', 'warm'];
+const WARMTH_RE = /^(t:(kalt|mild|warm)(,(kalt|mild|warm)){0,2}|luftig|mittel|warm)$/;
 const SETTING_KEYS = ['location', 'theme'];
 const MAX_IMAGE_BYTES = 1_900_000; // D1 erlaubt max. ~2 MB pro Zeile
 
@@ -41,6 +41,8 @@ async function handle({ request, env, params }) {
   const db = env.DB;
   if (!schemaReady) {
     await db.batch(SCHEMA.map((s) => db.prepare(s)));
+    // Spalte für Größe/Höhe am Avatar nachrüsten (ignoriert, falls schon da)
+    try { await db.prepare('ALTER TABLE pieces ADD COLUMN fit TEXT').run(); } catch (e) { /* existiert schon */ }
     schemaReady = true;
   }
 
@@ -106,7 +108,7 @@ async function handle({ request, env, params }) {
       const t = now();
       await db.prepare(`INSERT INTO pieces (id, name, slots, color, warmth, rain, brand, notes, image_id, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .bind(id, c.name ?? 'Neues Teil', c.slots ?? '[]', c.color ?? null, c.warmth ?? 'mittel',
+        .bind(id, c.name ?? 'Neues Teil', c.slots ?? '[]', c.color ?? null, c.warmth ?? 't:kalt,mild,warm',
           c.rain ?? 1, c.brand ?? null, c.notes ?? null, c.image_id ?? null, t, t).run();
       const row = await db.prepare('SELECT * FROM pieces WHERE id = ?').bind(id).first();
       return json(rowPiece(row));
@@ -242,7 +244,13 @@ function cleanPiece(b) {
   if ('name' in b) o.name = str(b.name, 80) || 'Ohne Namen';
   if ('slots' in b) o.slots = JSON.stringify((Array.isArray(b.slots) ? b.slots : []).filter((s) => SLOTS.includes(s)).slice(0, 4));
   if ('color' in b) o.color = /^#[0-9a-f]{6}$/i.test(b.color || '') ? b.color : null;
-  if ('warmth' in b) o.warmth = WARMTH.includes(b.warmth) ? b.warmth : 'mittel';
+  if ('warmth' in b) o.warmth = WARMTH_RE.test(String(b.warmth || '')) ? b.warmth : 't:kalt,mild,warm';
+  if ('fit' in b) {
+    const f = b.fit && typeof b.fit === 'object' ? b.fit : {};
+    const sc = Math.min(1.8, Math.max(0.5, Number(f.s) || 1));
+    const y = Math.min(25, Math.max(-25, Number(f.y) || 0));
+    o.fit = JSON.stringify({ s: Math.round(sc * 100) / 100, y: Math.round(y) });
+  }
   if ('rain' in b) o.rain = b.rain ? 1 : 0;
   if ('brand' in b) o.brand = str(b.brand, 60);
   if ('notes' in b) o.notes = str(b.notes, 2000);
@@ -253,7 +261,7 @@ function cleanPiece(b) {
 function rowPiece(r) {
   return {
     id: r.id, name: r.name, slots: safeParse(r.slots, []), color: r.color, warmth: r.warmth || 'mittel',
-    rain: !!r.rain, brand: r.brand, notes: r.notes, image_id: r.image_id,
+    rain: !!r.rain, brand: r.brand, notes: r.notes, image_id: r.image_id, fit: safeParse(r.fit || 'null', null),
     created_at: r.created_at, updated_at: r.updated_at,
   };
 }

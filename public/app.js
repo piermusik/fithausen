@@ -19,25 +19,42 @@ const ORDER = SLOT_DEFS.map((s) => s.key);
 const TORSO = ['aussen', 'drueber', 'mitte', 'basis']; // außen → innen
 // Position am Avatar in % der Bühne: [links, oben, breite, höhe, z-index]
 const BOX = {
-  hose: [27, 49, 46, 38, 1],
-  schuhe: [23, 84, 54, 14, 2],
-  basis: [22, 21, 56, 35, 3],
-  mitte: [19, 19, 62, 35, 4],
-  drueber: [16, 18, 68, 38, 5],
-  aussen: [12, 17, 76, 44, 6],
-  schal: [33, 15, 34, 24, 7],
-  tasche: [69, 40, 30, 24, 8],
+  hose: [21, 46, 58, 45, 1],
+  schuhe: [19, 85, 62, 15, 2],
+  basis: [20, 19, 60, 37, 3],
+  mitte: [16, 18, 68, 39, 4],
+  drueber: [14, 17.5, 72, 41, 5],
+  aussen: [10, 17, 80, 47, 6],
+  schal: [31, 15, 38, 24, 7],
+  tasche: [68, 40, 32, 26, 8],
   face: [30, -4, 40, 25, 9],
   kopf: [30, -10, 40, 14, 10],
 };
+// Wo das Bild in seinem Feld klebt: Oberteile und Hosen oben bündig, Schuhe unten
+const ANCHOR = { hose: '50% 0%', schuhe: '50% 100%', basis: '50% 0%', mitte: '50% 0%', drueber: '50% 0%', aussen: '50% 0%', schal: '50% 0%', tasche: '50% 50%', kopf: '50% 100%' };
 const CHIP_COLORS = { kopf: '#E4A0F7', schal: '#FF48B0', aussen: '#3E6B48', drueber: '#E8B04B', mitte: '#00A95C', basis: '#0078BF', hose: '#FF6C2F', schuhe: '#8B4A2B', tasche: '#C1502E' };
-const VERSION = '4';
+const VERSION = '5';
 const GHOSTS = ['rgba(255,72,176,.8)', 'rgba(33,64,212,.55)', 'rgba(255,232,0,.95)'];
 // Flugbahn beim Refresh/Shuffle: [dx, dy, Drehung, Verzögerung]
 const FLY = { hose: [-260, 80, -50, 0.04], schuhe: [220, 160, 70, 0.1], basis: [260, -60, 40, 0.16], mitte: [-260, -140, -35, 0.24], drueber: [240, -260, 60, 0.3], aussen: [0, -460, 25, 0.36], schal: [280, -240, 120, 0.44], tasche: [300, 40, -80, 0.4], kopf: [-120, -380, -140, 0.5] };
 const PAPERS = ['#CFE3F4', '#FFF3A6', '#FFD6EA', '#D6EEDC', '#FFE0C7', '#E4DDF5'];
 const TILTS = [-2.5, 1.5, -1, 2, -1.5, 1, 0.5, -2];
-const WARMTH = [['luftig', 'luftig'], ['mittel', 'mittel'], ['warm', 'warm']];
+const TEMPS = [['kalt', 'kalt', 'bis 10°'], ['mild', 'mild', '11–21°'], ['warm', 'warm', 'ab 22°']];
+const ALL_TEMPS = ['kalt', 'mild', 'warm'];
+// Gespeichert als "t:kalt,mild". Alte Werte (luftig/mittel/warm) werden übersetzt.
+function tempsOf(p) {
+  const w = String((p && p.warmth) || '');
+  if (w.startsWith('t:')) { const a = w.slice(2).split(',').filter((x) => ALL_TEMPS.includes(x)); return a.length ? a : ALL_TEMPS.slice(); }
+  if (w === 'luftig') return ['mild', 'warm'];
+  if (w === 'warm') return ['kalt'];
+  return ALL_TEMPS.slice();
+}
+const tempsStr = (a) => 't:' + ALL_TEMPS.filter((x) => a.includes(x)).join(',');
+function toggleTemp(arr, k) {
+  const next = arr.includes(k) ? arr.filter((x) => x !== k) : [...arr, k];
+  return next.length ? next : null;
+}
+const fitOf = (p) => ({ s: (p && p.fit && p.fit.s) || 1, y: (p && p.fit && p.fit.y) || 0 });
 const THEMES = [['blau', 'Blau', '#2140D4', '#FFFFFF'], ['hell', 'Hell', '#E4E1DA', '#1A1A1A'], ['nacht', 'Nacht', '#121316', '#F2EFE8']];
 const normTheme = (t) => (THEMES.some(([k]) => k === t) ? t : 'blau');
 const DEFAULT_LOC = { name: 'Düsseldorf', region: 'Nordrhein-Westfalen, Deutschland', lat: 51.2277, lon: 6.7735 };
@@ -61,6 +78,8 @@ const I = {
   rain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.5A3.5 3.5 0 0 1 17 15Z"></path><path d="M9 18l-1 2M13 18l-1 2M17 18l-1 2"></path></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>',
   cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1 .5-8 5 5 0 0 1 9.6 1.5A3.5 3.5 0 0 1 17 18Z"></path></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"></path></svg>',
+  snow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9M9.5 4.5 12 7l2.5-2.5M9.5 19.5 12 17l2.5 2.5"></path></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"></path></svg>',
 };
 
@@ -163,7 +182,7 @@ async function loadWeather(silent = false) {
   const loc = S.settings.location || DEFAULT_LOC;
   try {
     const u = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}`
-      + '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m'
+      + '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,is_day'
       + '&hourly=temperature_2m,precipitation_probability,weather_code'
       + '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code'
       + '&timezone=auto&forecast_days=2';
@@ -192,13 +211,14 @@ async function loadWeather(silent = false) {
     else if (rainFrom !== null) stamp = `REGEN AB ${rainFrom}H`;
     else if (rain) stamp = 'SCHAUER MÖGLICH';
     else if (feel === 'warm') stamp = 'WARM';
-    else stamp = code <= 1 ? 'SONNE' : 'TROCKEN';
+    else stamp = d.current.weather_code <= 1 ? (d.current.is_day ? 'SONNE' : 'KLARE NACHT') : 'TROCKEN';
     const tips = [];
     if (feel === 'kalt') tips.push(tmax < 5 ? 'Jacke, Schal, Mütze' : 'Jacke + Schal');
     else if (feel === 'mild') tips.push('leichte Jacke');
     else tips.push('luftig');
     if (rain) tips.push('regenfest');
     S.weather = {
+      isDay: d.current.is_day !== 0, nowCode: d.current.weather_code,
       temp: d.current.temperature_2m, feels: d.current.apparent_temperature, wind: d.current.wind_speed_10m,
       tmax, tmin, rain, rainFrom, nowRain, feel, code, desc: wdesc(code, rain), place: loc.name, strip, stamp, tip: tips.join(', '),
     };
@@ -215,9 +235,7 @@ function fits(p) {
   const w = S.weather;
   if (!w || !G.wfilter) return true;
   if (w.rain && !p.rain) return false;
-  if (w.feel === 'kalt' && p.warmth === 'luftig') return false;
-  if (w.feel === 'warm' && p.warmth === 'warm') return false;
-  return true;
+  return tempsOf(p).includes(w.feel);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +326,18 @@ function cutHTML(p) {
   if (p.image_id) return `<img class="cut" style="--g:${ghost(p.id)}" src="/api/images/${esc(p.image_id)}" alt="" draggable="false" loading="lazy">`;
   return `<div class="swatch" style="--c:${esc(p.color || '#BBBBBB')};--g:${ghost(p.id)}"><span>${esc(p.name)}</span></div>`;
 }
+function slotHTML(k, p, o = {}) {
+  const [x, y, wd, h, z] = BOX[k];
+  const [dx, dy, rot, dl] = FLY[k];
+  const f = fitOf(p);
+  const cls = ['slot', o.sel ? 'is-sel' : '', o.held ? 'held' : '', o.over ? 'over' : ''].join(' ');
+  return `<button class="${cls}" data-act="${o.act || 'sel'}" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.5 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s;--op:${ANCHOR[k] || '50% 50%'};--fs:${f.s};--fy:${f.y}" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
+}
+// Großes Bild mit Klebeband, das wirklich am Bild klebt
+function pinHero(src, opts = {}) {
+  const img = src ? `<img class="cut free" style="--g:${opts.ghost || GHOSTS[0]}" src="${src}" alt="${esc(opts.alt || '')}" draggable="false">` : `<span class="swatch big-swatch" style="--c:${esc(opts.color || '#BBBBBB')}"><span>${esc(opts.alt || '')}</span></span>`;
+  return `<div class="paper hero" style="--p:${opts.paper || '#FFF3A6'}"><div class="pinwrap"><span class="pin" style="--r:${opts.rot || 0}deg">${img}<span class="tape l" aria-hidden="true"></span><span class="tape r" aria-hidden="true"></span></span></div>${opts.extra || ''}</div>`;
+}
 function paperHTML(p, cls = '', extra = '') {
   return `<div class="paper ${cls}" style="--p:${paper(p.id)}"><span class="tape" aria-hidden="true"></span><div class="inner" style="--r:${tilt(p.id)}deg">${cutHTML(p)}</div>${extra}</div>`;
 }
@@ -380,11 +410,11 @@ function gameView() {
   const filterPill = `<button class="t-filter ${G.wfilter ? '' : 'off'}" data-act="wfilter" aria-pressed="${G.wfilter}" title="Klamotten nach Wetter filtern">${G.wfilter ? 'Filter an' : 'Filter aus'}</button>`;
   let wx;
   if (w) {
-    const icon = w.rain ? I.rain : w.code <= 1 ? I.sun : I.cloud;
+    const icon = w.rain ? I.rain : !w.isDay ? I.moon : w.nowCode <= 1 ? I.sun : I.cloud;
     const more = G.wOpen ? `<div class="wx-more"><div class="t-strip">${w.strip.map((x) => `<span class="${x.r ? 'r' : ''}">${x.h}h <b>${x.t}°</b></span>`).join('')}</div>
       <p class="wx-tip">→ ${esc(w.tip)} · Wind ${Math.round(w.wind)} km/h · ${esc((S.settings.location || DEFAULT_LOC).name)}</p></div>` : '';
     wx = `<div class="card wx" data-act="wopen" role="button" tabindex="0" aria-expanded="${!!G.wOpen}" aria-label="Wetter, antippen für mehr">
-      <div class="wx-row"><span class="wx-icon ${w.rain ? 'rain' : ''}">${icon}</span><span class="wx-temp">${Math.round(w.temp)}°</span>
+      <div class="wx-row"><span class="wx-icon ${w.rain ? 'rain' : !w.isDay ? 'night' : ''}">${icon}</span><span class="wx-temp">${Math.round(w.temp)}°</span>
       <span class="wx-mid"><span class="wx-stamp ${w.rain ? '' : 'dry'}">${esc(w.stamp)}</span><span class="wx-sub">${Math.round(w.tmin)}–${Math.round(w.tmax)}° · gefühlt ${Math.round(w.feels)}°</span></span>${filterPill}</div>${more}</div>`;
   } else {
     wx = `<div class="card wx"><div class="wx-row"><span class="wx-icon">${I.cloud}</span><span class="wx-mid"><span class="wx-sub">${S.weatherFailed ? 'Wetter gerade nicht erreichbar' : 'Wetter wird geladen …'}</span></span>${filterPill}</div></div>`;
@@ -403,22 +433,22 @@ function gameView() {
   }
 
   // Bühne
-  const parts = G.active.map((k) => {
-    const p = pieceById(G.pick[k]);
-    const [x, y, wd, h, z] = BOX[k];
-    const [dx, dy, rot, dl] = FLY[k];
-    return `<button class="slot ${k === G.sel ? 'is-sel' : ''} ${G.held[k] && !S.flyAll ? 'held' : ''}" data-act="sel" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.6 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
-  }).join('');
   const torso = TORSO.filter((k) => G.active.includes(k) && G.pick[k]);
   const covered = torso.slice(1);
+  const overSet = new Set([...torso.slice(0, -1), 'schal', 'tasche']);
+  const parts = G.active.map((k) => slotHTML(k, pieceById(G.pick[k]), { sel: k === G.sel, held: G.held[k] && !S.flyAll, over: overSet.has(k) })).join('');
   const peeks = covered.length ? `<div class="peeks ui" style="--ud:.3s"><span class="peeks-lab">DRUNTER</span>${covered.map((k) => {
     const p = pieceById(G.pick[k]);
-    return `<button class="peek" data-act="sel" data-slot="${k}" aria-label="Drunter: ${esc(SLOT[k].label)}, ${esc(p.name)}">${cutHTML(p)}<small>${esc(SLOT[k].label)}</small></button>`;
+    return `<button class="peek" data-act="peek" data-slot="${k}" aria-label="Drunter: ${esc(SLOT[k].label)}, ${esc(p.name)} groß zeigen">${cutHTML(p)}<small>${esc(SLOT[k].label)}</small></button>`;
   }).join('')}</div>` : '';
+  const holdHint = covered.length ? `<span class="hold-hint ui">gedrückt halten = durchschauen</span>` : '';
+  const zp = G.zoom && G.active.includes(G.zoom) ? pieceById(G.pick[G.zoom]) : null;
+  const zoom = zp ? `<div class="zoom" data-act="unzoom" role="dialog" aria-label="${esc(zp.name)}">${pinHero(zp.image_id ? '/api/images/' + zp.image_id : '', { ghost: ghost(zp.id), paper: paper(zp.id), rot: tilt(zp.id), alt: zp.name, color: zp.color })}
+      <p class="zoom-name"><span class="lab">${esc(SLOT[G.zoom].label)}</span><strong>${esc(zp.name)}</strong><span class="sub">${esc(wornText(zp))} · antippen zum Schließen</span></p></div>` : '';
   const flying = Date.now() < (S.flyUntil || 0);
   const stage = `<div class="stage-wrap"><div class="stage ${flying ? 'fly' : ''}" id="stage"><div class="blob ui"></div><div class="ui" style="position:absolute;inset:0">${bodySVG()}</div>${parts}${faceHTML()}
-    <span class="tape ui" style="left:21%;top:20%;transform:rotate(-24deg);--ud:.25s" aria-hidden="true"></span>
-    <span class="tape ui" style="right:21%;top:20%;transform:rotate(20deg);--ud:.25s" aria-hidden="true"></span>${peeks}</div></div>`;
+    <span class="tape ui" style="right:-3%;top:14%;transform:rotate(36deg);--ud:.25s" aria-hidden="true"></span>
+    <span class="tape ui" style="left:-3%;top:80%;transform:rotate(-34deg);--ud:.25s" aria-hidden="true"></span>${peeks}</div>${holdHint}</div>${zoom}`;
 
   // Karte zum gewählten Slot
   const sel = G.sel;
@@ -445,15 +475,14 @@ function gameView() {
   </div>`;
 
   // Schicht-Chips
-  const inactive = ORDER.filter((k) => !G.active.includes(k));
-  const chips = G.active.map((k) => {
+  const chips = ORDER.map((k) => {
+    if (!G.active.includes(k)) {
+      const cold = w && G.wfilter && w.feel === 'kalt' && k === 'aussen' && cands('aussen').length;
+      return `<button class="pill chip off ${cold ? 'hint' : ''}" data-act="addslot" data-slot="${k}" aria-label="${esc(SLOT[k].label)} dazunehmen">${I.plus}<span>${esc(SLOT[k].label)}</span></button>`;
+    }
     const p = pieceById(G.pick[k]);
     return `<button class="pill chip ${k === G.sel ? 'on' : ''}" style="--chip:${CHIP_COLORS[k]}" data-act="sel" data-slot="${k}" aria-pressed="${k === G.sel}"><span>${esc(SLOT[k].label)}</span>${G.held[k] ? I.pin : ''}${p && isStale(p) ? '<span class="dot" title="lange nicht getragen"></span>' : ''}</button>`;
   }).join('');
-  const coldHint = w && G.wfilter && w.feel === 'kalt' && !G.active.includes('aussen') && cands('aussen').length
-    ? `<button class="pill chip hint" data-act="addslot" data-slot="aussen">${I.plus}<span>Jacke? Ist kalt</span></button>` : '';
-  const addBtn = inactive.length ? `<button class="pill chip dashed" data-act="addopen" aria-expanded="${G.addOpen}">${I.plus}<span>Dazu</span></button>` : '';
-  const addPanel = G.addOpen && inactive.length ? `<div class="card addpanel ui"><span class="mono">DAZUNEHMEN</span>${inactive.map((k) => `<button class="pill soft" data-act="addslot" data-slot="${k}">${esc(SLOT[k].label)} <span class="muted">${cands(k).length}</span></button>`).join('')}</div>` : '';
 
   // Heute an
   const tw = todayWear();
@@ -463,7 +492,7 @@ function gameView() {
     : `<button class="big secondary" data-act="wear">${tw ? 'Heute ändern' : 'Heute an'}</button>`;
 
   card = card.replace('{{ACTIONS}}', actions);
-  return `${head}${weatherBtn}${stage}${card}<div class="row scroll-x ui" style="--ud:.2s" data-keep="chips">${chips}${coldHint}${addBtn}</div>${addPanel}
+  return `${head}${weatherBtn}${stage}${card}<div class="row scroll-x ui" style="--ud:.2s" data-keep="chips">${chips}</div>
     <div class="bottom sticky ui" style="--ud:.24s"><button class="big primary" data-act="shuffle">${I.shuffle}<span>Shuffle</span></button>${wornBtn}</div>`;
 }
 
@@ -521,11 +550,19 @@ function pieceView(id) {
   const head = topBar(backBtn(`#/schrank/${mainSlot || 'alle'}`, 'Zurück zum Schrank'),
     `${kicker(p.slots.map((k) => SLOT[k]?.label).filter(Boolean).join(' · ') || 'ohne Kategorie')}<h1 class="title">Teil</h1>`,
     `<span class="spacer"></span>`);
-  const hero = paperHTML(p, 'hero', `<span class="tape l" aria-hidden="true"></span><span class="tape r" aria-hidden="true"></span>
-    <label class="hero-btn">${I.camera}<span>Foto ändern</span><input class="sr" type="file" accept="image/*" data-file="replace" data-id="${p.id}"></label>`);
+  const heroBtns = `<div class="hero-btns">${navigator.clipboard && navigator.clipboard.read ? `<button class="hero-btn" data-act="pastereplace" data-id="${p.id}">Einfügen</button>` : ''}
+    <label class="hero-btn">${I.camera}<span>Foto</span><input class="sr" type="file" accept="image/*" data-file="replace" data-id="${p.id}"></label></div>`;
+  const hero = pinHero(p.image_id ? '/api/images/' + p.image_id : '', { ghost: ghost(p.id), paper: paper(p.id), rot: tilt(p.id), alt: p.name, color: p.color, extra: heroBtns });
+  const fitSlot = p.slots[0] || 'mitte';
+  const f = fitOf(p);
+  const fitCard = `<div class="card section"><span class="k">Am Avatar</span>
+    <div class="fitrow"><div class="fitstage stage" id="fitstage"><div class="blob"></div>${bodySVG()}${slotHTML(fitSlot, p, { act: 'none' })}</div>
+    <div class="fitctl"><label class="k" for="fs">Größe</label><input id="fs" type="range" min="50" max="180" step="2" value="${Math.round(f.s * 100)}" data-fit="s" data-id="${p.id}">
+      <label class="k" for="fy">Höhe</label><input id="fy" type="range" min="-25" max="25" step="1" value="${-f.y}" data-fit="y" data-id="${p.id}">
+      <button class="pill soft" data-act="fitreset" data-id="${p.id}">Zurücksetzen</button></div></div></div>`;
 
   const slotPills = SLOT_DEFS.map((d) => `<button class="pill ${p.slots.includes(d.key) ? 'on' : 'soft'}" data-act="pslot" data-id="${p.id}" data-slot="${d.key}" aria-pressed="${p.slots.includes(d.key)}">${esc(d.label)}</button>`).join('');
-  const warmPills = WARMTH.map(([k, l]) => `<button class="pill ${p.warmth === k ? 'on' : 'soft'}" data-act="pwarm" data-id="${p.id}" data-v="${k}" aria-pressed="${p.warmth === k}">${l}</button>`).join('');
+  const warmPills = tempPills(tempsOf(p), 'ptemp', p.id);
   const rainPill = `<button class="pill ${p.rain ? 'on' : 'soft'}" data-act="prain" data-id="${p.id}" aria-pressed="${p.rain}">${I.rain}<span>regen ok</span></button>`;
 
   // Oft kombiniert mit
@@ -551,9 +588,10 @@ function pieceView(id) {
     <div class="card stats"><div><span class="k">Getragen</span><b>${s.count}×</b></div><div><span class="k">Zuletzt</span><b>${fmtDate(s.last)}</b></div><div><span class="k">Dabei seit</span><b>${fmtDate((p.created_at || '').slice(0, 10))}</b></div></div>
     <div class="card section">
       <div class="field"><span class="k">Kategorie</span><div class="wrap">${slotPills}</div></div>
-      <div class="field"><span class="k">Wetter</span><div class="wrap">${warmPills}${rainPill}</div></div>
+      <div class="field"><span class="k">Passt bei</span><div class="wrap">${warmPills}${rainPill}</div></div>
       <div class="field"><span class="k">Farbe</span><div class="colorrow"><input type="color" value="${esc(p.color || '#BBBBBB')}" data-pfield="color" data-id="${p.id}" aria-label="Farbe"><span class="muted" style="font-size:14px">für Platzhalter und Übersicht</span></div></div>
     </div>
+    ${fitCard}
     ${comboHTML}
     <div class="card section">
       <div class="field"><label class="k" for="brand">Marke</label><input class="text-input" id="brand" value="${esc(p.brand || '')}" data-pfield="brand" data-id="${p.id}" maxlength="60" placeholder="optional"></div>
@@ -562,13 +600,20 @@ function pieceView(id) {
     <div class="bottom"><button class="big primary" data-act="togame" data-id="${p.id}">Ins Mini-Game</button>${del}</div>`;
 }
 
+function tempPills(sel, act, id = '') {
+  const icons = { kalt: I.snow, mild: I.cloud, warm: I.sun };
+  const all = ALL_TEMPS.every((k) => sel.includes(k));
+  return TEMPS.map(([k, l, r]) => `<button class="pill ${sel.includes(k) ? 'on' : 'soft'}" data-act="${act}" data-id="${id}" data-v="${k}" aria-pressed="${sel.includes(k)}">${icons[k]}<span>${l} <small class="range">${r}</small></span></button>`).join('')
+    + `<button class="pill ${all ? 'on' : 'soft'}" data-act="${act}all" data-id="${id}" aria-pressed="${all}">immer</button>`;
+}
+
 // ----- Hinzufügen -----
 function resetAdd(arg) {
   if (ADD) for (const r of [ADD.orig, ADD.cutRes, ADD.origRes]) if (r && r.url) URL.revokeObjectURL(r.url);
   const kind = arg === 'gesicht' ? 'face' : 'piece';
   const slot = SLOT[arg] ? arg : null;
   ADD = { kind, step: 'pick', slot, orig: null, cutRes: null, origRes: null, useCut: true, progress: '', cutError: '', error: '', saving: false,
-    draft: { name: '', slots: slot ? [slot] : [], color: '#BBBBBB', warmth: 'mittel', rain: true, brand: '', notes: '' } };
+    draft: { name: '', slots: slot ? [slot] : [], color: '#BBBBBB', temps: ALL_TEMPS.slice(), rain: true, brand: '', notes: '' } };
 }
 
 function addView(arg) {
@@ -599,10 +644,9 @@ function addView(arg) {
 
   // Details
   const res = ADD.useCut && ADD.cutRes ? ADD.cutRes : ADD.origRes;
-  const preview = `<div class="paper hero" style="--p:${isFace ? '#FFD6EA' : '#FFF3A6'}"><span class="tape l"></span><span class="tape r"></span><div class="inner" style="--r:-2deg"><img class="cut" style="--g:${GHOSTS[0]}" src="${res.url}" alt="Vorschau"></div></div>`;
+  const preview = pinHero(res.url, { paper: isFace ? '#FFD6EA' : '#FFF3A6', rot: -2, alt: 'Vorschau' });
   const seg = ADD.cutRes ? `<div class="seg" role="group" aria-label="Bildvariante"><button data-act="usecut" data-v="1" aria-pressed="${ADD.useCut}">Freigestellt</button><button data-act="usecut" data-v="0" aria-pressed="${!ADD.useCut}">Original</button></div>` : '';
-  const autoBtn = !ADD.cutRes ? `<button class="pill" data-act="autocut" style="align-self:center">Automatisch freistellen (Beta)</button>` : '';
-  const cutNote = (ADD.cutError ? `<p class="note warn">${esc(ADD.cutError)}</p>` : '') + autoBtn;
+  const cutNote = ADD.cutRes ? '' : `<p class="note">Nicht freigestellt. Für den Collage-Look lieber in Fotos freistellen, kopieren und einfügen.</p>`;
   const saveBtns = `<div class="bottom">
       <button class="big primary" data-act="addsave" data-next="0" ${ADD.saving ? 'disabled' : ''}>${ADD.saving ? 'Speichert …' : 'Speichern'}</button>
       <button class="big secondary" data-act="addsave" data-next="1" ${ADD.saving ? 'disabled' : ''}>+ Nächstes</button>
@@ -613,12 +657,12 @@ function addView(arg) {
 
   const d = ADD.draft;
   const slotPills = SLOT_DEFS.map((s) => `<button class="pill ${d.slots.includes(s.key) ? 'on' : 'soft'}" data-act="dslot" data-slot="${s.key}" aria-pressed="${d.slots.includes(s.key)}">${esc(s.label)}</button>`).join('');
-  const warmPills = WARMTH.map(([k, l]) => `<button class="pill ${d.warmth === k ? 'on' : 'soft'}" data-act="dwarm" data-v="${k}" aria-pressed="${d.warmth === k}">${l}</button>`).join('');
+  const warmPills = tempPills(d.temps, 'dtemp');
   return `${head}${preview}${seg}${cutNote}
     <div class="card section">
       <div class="field"><label class="k" for="dname">Name</label><input class="text-input" id="dname" data-dfield="name" value="${esc(d.name)}" maxlength="80" placeholder="z. B. Strickpulli creme" autocomplete="off"></div>
       <div class="field"><span class="k">Kategorie ${d.slots.length ? '' : '<span class="warn">(mind. eine)</span>'}</span><div class="wrap">${slotPills}</div></div>
-      <div class="field"><span class="k">Wetter</span><div class="wrap">${warmPills}<button class="pill ${d.rain ? 'on' : 'soft'}" data-act="drain" aria-pressed="${d.rain}">${I.rain}<span>regen ok</span></button></div></div>
+      <div class="field"><span class="k">Passt bei</span><div class="wrap">${warmPills}<button class="pill ${d.rain ? 'on' : 'soft'}" data-act="drain" aria-pressed="${d.rain}">${I.rain}<span>regen ok</span></button></div></div>
       <div class="field"><span class="k">Farbe</span><div class="colorrow"><input type="color" value="${esc(d.color)}" data-dfield="color" aria-label="Farbe"><span class="muted" style="font-size:14px">automatisch erkannt</span></div></div>
       <div class="field"><label class="k" for="dbrand">Marke</label><input class="text-input" id="dbrand" data-dfield="brand" value="${esc(d.brand)}" maxlength="60" placeholder="optional"></div>
     </div>
@@ -722,7 +766,10 @@ app.addEventListener('click', async (ev) => {
   switch (act) {
     case 'reload': location.reload(); return;
     case 'refresh': refresh(); return;
-    case 'sel': G.sel = slot; G.addOpen = false; render(); return;
+    case 'sel': G.sel = slot; render(); return;
+    case 'peek': G.sel = slot; G.zoom = slot; render(); return;
+    case 'unzoom': G.zoom = null; render(); return;
+    case 'none': return;
     case 'step': step(Number(el.dataset.dir)); return;
     case 'roll': rollSlot(G.sel); G.touched = true; render(); return;
     case 'hold': G.held[G.sel] = !G.held[G.sel]; render(); return;
@@ -749,7 +796,23 @@ app.addEventListener('click', async (ev) => {
       if (!next.length) { toast('Mindestens eine Kategorie'); return; }
       p.slots = next; render(); savePiece(p.id, { slots: next }); return;
     }
-    case 'pwarm': { const p = pieceById(id); p.warmth = el.dataset.v; render(); savePiece(id, { warmth: p.warmth }); return; }
+    case 'ptemp': case 'ptempall': {
+      const p = pieceById(id); if (!p) return;
+      const next = act === 'ptempall' ? ALL_TEMPS.slice() : toggleTemp(tempsOf(p), el.dataset.v);
+      if (!next) { toast('Mindestens eins auswählen'); return; }
+      p.warmth = tempsStr(next); render(); savePiece(id, { warmth: p.warmth }); return;
+    }
+    case 'fitreset': {
+      const p = pieceById(id); if (!p) return;
+      p.fit = { s: 1, y: 0 }; render(); savePiece(id, { fit: p.fit }); return;
+    }
+    case 'pastereplace':
+      try {
+        const blob = await readClipboardImage();
+        if (!blob) { toast('Kein Bild in der Zwischenablage'); return; }
+        replacePhoto(id, new File([blob], 'eingefuegt', { type: blob.type }));
+      } catch (e) { toast('Einfügen nicht erlaubt oder kein Bild kopiert'); }
+      return;
     case 'prain': { const p = pieceById(id); p.rain = !p.rain; render(); savePiece(id, { rain: p.rain }); return; }
     case 'togame': {
       const p = pieceById(id); if (!p) return;
@@ -779,19 +842,18 @@ app.addEventListener('click', async (ev) => {
       d.slots = d.slots.includes(slot) ? d.slots.filter((k) => k !== slot) : ORDER.filter((k) => d.slots.includes(k) || k === slot);
       render(); return;
     }
-    case 'dwarm': ADD.draft.warmth = el.dataset.v; render(); return;
+    case 'dtemp': case 'dtempall': {
+      const next = act === 'dtempall' ? ALL_TEMPS.slice() : toggleTemp(ADD.draft.temps, el.dataset.v);
+      if (!next) { toast('Mindestens eins auswählen'); return; }
+      ADD.draft.temps = next; render(); return;
+    }
     case 'drain': ADD.draft.rain = !ADD.draft.rain; render(); return;
     case 'autocut': if (ADD.orig) startProcess(ADD.orig.blob, false, true); return;
     case 'addreset': resetAdd(ADD.kind === 'face' ? 'gesicht' : ADD.slot); render(); return;
     case 'addsave': await addSave(el.dataset.next === '1'); return;
     case 'pasteimg':
       try {
-        const items = await navigator.clipboard.read();
-        let blob = null;
-        for (const it of items) {
-          const type = it.types.find((t) => t.startsWith('image/'));
-          if (type) { blob = await it.getType(type); break; }
-        }
+        const blob = await readClipboardImage();
         if (!blob) { toast('Kein Bild in der Zwischenablage'); return; }
         startProcess(new File([blob], 'eingefuegt', { type: blob.type }), true);
       } catch (e) { toast('Einfügen nicht erlaubt oder kein Bild kopiert'); }
@@ -818,6 +880,14 @@ app.addEventListener('input', (ev) => {
     const f = el.dataset.pfield;
     p[f] = el.value;
     debounce('p' + p.id + f, () => savePiece(p.id, { [f]: el.value }), f === 'color' ? 400 : 700);
+  } else if (el.dataset.fit) {
+    const p = pieceById(el.dataset.id); if (!p) return;
+    const f = fitOf(p);
+    if (el.dataset.fit === 's') f.s = Number(el.value) / 100; else f.y = -Number(el.value);
+    p.fit = f;
+    const sl = document.querySelector('#fitstage .slot');
+    if (sl) { sl.style.setProperty('--fs', f.s); sl.style.setProperty('--fy', f.y); }
+    debounce('fit' + p.id, () => savePiece(p.id, { fit: f }), 500);
   } else if (el.dataset.dfield) {
     ADD.draft[el.dataset.dfield] = el.value;
   } else if ('pastezone' in el.dataset) {
@@ -856,6 +926,26 @@ app.addEventListener('submit', async (ev) => {
   }
 });
 
+// Gedrückt halten auf dem Avatar = obere Schichten durchsichtig
+let holdT = null, holdUsed = false, holdX = 0, holdY = 0;
+app.addEventListener('pointerdown', (ev) => {
+  const st = ev.target.closest('#stage');
+  holdUsed = false;
+  if (!st) return;
+  holdX = ev.clientX; holdY = ev.clientY;
+  clearTimeout(holdT);
+  holdT = setTimeout(() => { holdUsed = true; st.classList.add('onion'); }, 320);
+});
+app.addEventListener('pointermove', (ev) => {
+  if (holdT && (Math.abs(ev.clientX - holdX) > 12 || Math.abs(ev.clientY - holdY) > 12) && !holdUsed) clearTimeout(holdT);
+});
+const endHold = () => { clearTimeout(holdT); holdT = null; const st = document.getElementById('stage'); if (st) st.classList.remove('onion'); };
+app.addEventListener('pointerup', endHold);
+app.addEventListener('pointercancel', endHold);
+app.addEventListener('contextmenu', (ev) => { if (ev.target.closest('#stage')) ev.preventDefault(); });
+// Klick nach dem Halten nicht als Auswahl zählen
+app.addEventListener('click', (ev) => { if (holdUsed && ev.target.closest('#stage')) { holdUsed = false; ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
+
 // Wischen auf der Bühne = nächstes/vorheriges Teil
 let touchX = null;
 app.addEventListener('touchstart', (ev) => { if (ev.target.closest('#stage')) touchX = ev.touches[0].clientX; }, { passive: true });
@@ -863,7 +953,7 @@ app.addEventListener('touchend', (ev) => {
   if (touchX === null) return;
   const dx = ev.changedTouches[0].clientX - touchX;
   touchX = null;
-  if (Math.abs(dx) > 50) step(dx < 0 ? 1 : -1);
+  if (Math.abs(dx) > 50 && !holdUsed) step(dx < 0 ? 1 : -1);
 }, { passive: true });
 
 // Einfügen eines (freigestellten) Bildes beim Hinzufügen
@@ -1085,14 +1175,15 @@ async function addSave(next) {
     } else {
       const d = ADD.draft;
       const name = d.name.trim() || `${SLOT[d.slots[0]].label} ${cands(d.slots[0]).length + 1}`;
-      const p = await api('/pieces', { method: 'POST', body: JSON.stringify({ ...d, name, image_id: img.id }) });
+      const { temps, ...rest } = d;
+      const p = await api('/pieces', { method: 'POST', body: JSON.stringify({ ...rest, warmth: tempsStr(temps), name, image_id: img.id }) });
       S.pieces.unshift(p);
       toast(`„${p.name}“ gespeichert`);
       target = '#/teil/' + p.id;
     }
     if (next) {
       const keep = ADD.kind === 'face' ? 'gesicht' : (ADD.slot || ADD.draft.slots[0]);
-      const keepDraft = ADD.kind === 'piece' ? { slots: ADD.draft.slots, warmth: ADD.draft.warmth, rain: ADD.draft.rain } : null;
+      const keepDraft = ADD.kind === 'piece' ? { slots: ADD.draft.slots, temps: ADD.draft.temps, rain: ADD.draft.rain } : null;
       resetAdd(keep);
       if (keepDraft) Object.assign(ADD.draft, keepDraft);
       render();
@@ -1103,6 +1194,15 @@ async function addSave(next) {
     ADD.saving = false; render();
     toast('Speichern fehlgeschlagen: ' + e.message);
   }
+}
+
+async function readClipboardImage() {
+  const items = await navigator.clipboard.read();
+  for (const it of items) {
+    const type = it.types.find((t) => t.startsWith('image/'));
+    if (type) return it.getType(type);
+  }
+  return null;
 }
 
 async function replacePhoto(id, file) {
