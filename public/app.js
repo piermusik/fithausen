@@ -33,7 +33,7 @@ const BOX = {
 // Wo das Bild in seinem Feld klebt: Oberteile und Hosen oben bündig, Schuhe unten
 const ANCHOR = { hose: '50% 0%', schuhe: '50% 100%', basis: '50% 0%', mitte: '50% 0%', drueber: '50% 0%', aussen: '50% 0%', schal: '50% 0%', tasche: '50% 50%', kopf: '50% 100%' };
 const CHIP_COLORS = { kopf: '#E4A0F7', schal: '#FF48B0', aussen: '#3E6B48', drueber: '#E8B04B', mitte: '#00A95C', basis: '#0078BF', hose: '#FF6C2F', schuhe: '#8B4A2B', tasche: '#C1502E' };
-const VERSION = '6';
+const VERSION = '7';
 const GHOSTS = ['rgba(255,72,176,.8)', 'rgba(33,64,212,.55)', 'rgba(255,232,0,.95)'];
 // Flugbahn beim Refresh/Shuffle: [dx, dy, Drehung, Verzögerung]
 const FLY = { hose: [-260, 80, -50, 0.04], schuhe: [220, 160, 70, 0.1], basis: [260, -60, 40, 0.16], mitte: [-260, -140, -35, 0.24], drueber: [240, -260, 60, 0.3], aussen: [0, -460, 25, 0.36], schal: [280, -240, 120, 0.44], tasche: [300, 40, -80, 0.4], kopf: [-120, -380, -140, 0.5] };
@@ -71,6 +71,8 @@ const I = {
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5"></path><path d="M4 20L21 3"></path><path d="M21 16v5h-5"></path><path d="M15 15l6 6"></path><path d="M4 4l5 5"></path></svg>',
   pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6l-1 6 3 3H7l3-3Z"></path><path d="M12 13v7"></path></svg>',
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8-4.3-4.1 5.9-.8Z"></path></svg>',
+  starFill: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8 6.8 19.6l1-5.8-4.3-4.1 5.9-.8Z"></path></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>',
   camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4Z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>',
@@ -87,7 +89,7 @@ const I = {
 // Zustand
 // ---------------------------------------------------------------------------
 const app = document.getElementById('app');
-const S = { phase: 'loading', pieces: [], wears: [], faces: [], settings: {}, weather: null, err: null, st: {} };
+const S = { phase: 'loading', pieces: [], wears: [], faces: [], favorites: [], settings: {}, weather: null, err: null, st: {} };
 const G = { init: false, active: [], pick: {}, held: {}, sel: null, face: null, wfilter: true, addOpen: false, touched: false };
 let ADD = null;
 let CLOSET = { tab: 'alle', filter: 'alle' };
@@ -491,9 +493,11 @@ function gameView() {
     ? `<button class="big ok" data-act="wear">${I.check}<span>Gespeichert</span></button>`
     : `<button class="big secondary" data-act="wear">${tw ? 'Heute ändern' : 'Heute an'}</button>`;
 
+  const pinned = findFavorite(currentOutfit());
+  const pinBtn = `<button class="big secondary starbtn ${pinned ? 'on' : ''}" data-act="pinnow" aria-pressed="${!!pinned}" aria-label="${pinned ? 'Outfit nicht mehr anpinnen' : 'Outfit anpinnen'}">${pinned ? I.starFill : I.star}</button>`;
   card = card.replace('{{ACTIONS}}', actions);
   return `${head}${weatherBtn}${stage}${card}<div class="row scroll-x ui" style="--ud:.2s" data-keep="chips">${chips}</div>
-    <div class="bottom sticky ui" style="--ud:.24s"><button class="big primary" data-act="shuffle">${I.shuffle}<span>Shuffle</span></button>${wornBtn}</div>`;
+    <div class="bottom sticky ui" style="--ud:.24s"><button class="big primary" data-act="shuffle">${I.shuffle}<span>Shuffle</span></button>${pinBtn}${wornBtn}</div>`;
 }
 
 function faceHTML() {
@@ -505,16 +509,98 @@ function faceHTML() {
   return `<button class="face ui" data-act="face" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%;z-index:${BOX.face[4]};transform:rotate(-3deg)" aria-label="${S.faces.length ? 'Anderes Gesicht' : 'Gesicht-Platzhalter, Gesichter in den Einstellungen hinzufügen'}">${inner}</button>${tag}`;
 }
 
+// ----- Outfits: angepinnt + Verlauf -----
+function outfitKey(o) { return Object.keys(o || {}).sort().map((k) => k + ':' + o[k]).join('|'); }
+function findFavorite(o) {
+  const key = outfitKey(o);
+  return key ? S.favorites.find((f) => outfitKey(f.outfit) === key) || null : null;
+}
+function miniAvatar(outfit, faceId) {
+  const slots = ORDER.filter((k) => outfit[k] && pieceById(outfit[k]));
+  const parts = slots.map((k) => slotHTML(k, pieceById(outfit[k]), { act: 'none' })).join('');
+  const [x, y, w, h, z] = BOX.face;
+  const f = S.faces.find((ff) => ff.id === faceId);
+  const face = `<span class="face" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%;z-index:${z};transform:rotate(-3deg)">${f ? `<img class="cut" src="/api/images/${esc(f.image_id)}" alt="" draggable="false" loading="lazy">` : faceDoodle()}</span>`;
+  return `<div class="stage mini" aria-hidden="true"><div class="blob"></div>${bodySVG()}${parts}${face}</div>`;
+}
+function outfitNames(outfit) {
+  return ORDER.filter((k) => outfit[k] && pieceById(outfit[k])).map((k) => pieceById(outfit[k]).name);
+}
+function dayLabel(date) {
+  const diff = daysBetween(date, today());
+  if (diff === 0) return 'Heute';
+  if (diff === 1) return 'Gestern';
+  if (diff === 2) return 'Vorgestern';
+  const d = new Date(date + 'T12:00:00');
+  return `${d.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '')} ${d.getDate()}.${d.getMonth() + 1}.`;
+}
+function outfitsView() {
+  const pins = S.favorites.filter((f) => outfitNames(f.outfit).length);
+  const pinRow = pins.length
+    ? `<div class="row scroll-x pinrow" data-keep="pins">${pins.map((f, i) => `<div class="card ofcard pin-card" style="--i:${i}">
+        ${miniAvatar(f.outfit, f.face_id)}
+        <div class="of-actions"><button class="pill soft" data-act="wearagain" data-src="fav" data-id="${f.id}">Anziehen</button>
+        <button class="pill soft icon" data-act="unpin" data-id="${f.id}" aria-label="Nicht mehr anpinnen">${I.starFill}</button></div></div>`).join('')}</div>`
+    : `<div class="card empty"><p>Noch nichts angepinnt. Im Mini-Game mit dem Stern merkst du dir ein Outfit.</p></div>`;
+  const limit = CLOSET.histLimit || 20;
+  const wears = [...S.wears].sort((a, b) => (a.date < b.date ? 1 : -1)).filter((w) => outfitNames(w.outfit).length);
+  const feed = wears.slice(0, limit).map((w, i) => {
+    const fav = findFavorite(w.outfit);
+    const names = outfitNames(w.outfit);
+    return `<div class="card ofcard feed-card" style="--i:${i}">
+      ${miniAvatar(w.outfit, w.face_id)}
+      <div class="of-info"><span class="lab">${esc(dayLabel(w.date))}</span>
+        <span class="of-names">${names.map(esc).join(' · ')}</span>
+        <div class="of-actions"><button class="pill soft" data-act="wearagain" data-src="wear" data-id="${w.date}">Nochmal anziehen</button>
+          <button class="pill soft icon ${fav ? 'starred' : ''}" data-act="${fav ? 'unpin' : 'pinwear'}" data-id="${fav ? fav.id : w.date}" aria-label="${fav ? 'Nicht mehr anpinnen' : 'Anpinnen'}">${fav ? I.starFill : I.star}</button></div>
+      </div></div>`;
+  }).join('');
+  const more = wears.length > limit ? `<button class="pill" data-act="histmore" style="align-self:center">Ältere zeigen</button>` : '';
+  const feedBlock = wears.length ? `<div class="feed">${feed}</div>${more}` : `<div class="card empty"><p>Noch kein Outfit geloggt. Tipp im Mini-Game auf „Heute an“, dann landet es hier.</p></div>`;
+  return `<h2 class="sec-title">Angepinnt</h2>${pinRow}<h2 class="sec-title">Verlauf</h2>${feedBlock}`;
+}
+function loadOutfit(outfit, faceId) {
+  const ok = Object.fromEntries(Object.entries(outfit).filter(([, id]) => pieceById(id)));
+  if (!G.init) initGame();
+  G.active = ORDER.filter((k) => ok[k]);
+  for (const k of ['hose', 'schuhe']) if (!G.active.includes(k)) G.active = ORDER.filter((x) => G.active.includes(x) || x === k);
+  G.pick = { ...ok };
+  G.held = {};
+  if (faceId && S.faces.find((f) => f.id === faceId)) G.face = faceId;
+  G.sel = defaultSel();
+  G.touched = true;
+  S.flyUntil = Date.now() + 1300;
+  location.hash = '#/';
+}
+async function pinOutfit(outfit, faceId) {
+  if (findFavorite(outfit)) { toast('Schon angepinnt'); return; }
+  try {
+    const f = await api('/favorites', { method: 'POST', body: JSON.stringify({ outfit, face_id: faceId || null }) });
+    S.favorites.unshift(f);
+    toast('Angepinnt');
+    render();
+  } catch (e) { toast(e.message); }
+}
+async function unpinOutfit(id) {
+  try {
+    await api('/favorites/' + id, { method: 'DELETE' });
+    S.favorites = S.favorites.filter((f) => f.id !== id);
+    toast('Nicht mehr angepinnt');
+    render();
+  } catch (e) { toast(e.message); }
+}
+
 // ----- Schrank -----
 function closetView(tabArg) {
-  const tab = tabArg && (SLOT[tabArg] || tabArg === 'gesichter') ? tabArg : 'alle';
+  const tab = tabArg && (SLOT[tabArg] || tabArg === 'gesichter' || tabArg === 'outfits') ? tabArg : 'alle';
   CLOSET.tab = tab;
   const head = topBar(backBtn('#/', 'Zurück zum Mini-Game'), `${kicker(S.pieces.length + ' Teile')}<h1 class="title">Schrank</h1>`,
     `<a class="iconbtn" href="#/neu/${tab === 'gesichter' ? 'gesicht' : tab === 'alle' ? '' : tab}" aria-label="Neu hinzufügen">${I.plus}</a>`);
-  const tabs = [['alle', 'Alle'], ...SLOT_DEFS.map((s) => [s.key, s.label]), ['gesichter', 'Gesichter']]
+  const tabs = [['alle', 'Alle'], ['outfits', 'Outfits'], ...SLOT_DEFS.map((s) => [s.key, s.label]), ['gesichter', 'Gesichter']]
     .map(([k, l]) => `<a class="pill ${k === tab ? 'on' : ''}" href="#/schrank/${k}" aria-current="${k === tab ? 'page' : 'false'}">${esc(l)}</a>`).join('');
 
   if (tab === 'gesichter') return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${facesGrid()}`;
+  if (tab === 'outfits') return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${outfitsView()}`;
 
   const filters = [['alle', 'Alle'], ['lange', 'Lange nicht'], ['selten', 'Selten'], ['nie', 'Nie getragen']]
     .map(([k, l]) => `<button class="pill ${CLOSET.filter === k ? 'on' : 'soft'}" data-act="cfilter" data-f="${k}">${l}</button>`).join('');
@@ -785,6 +871,20 @@ app.addEventListener('click', async (ev) => {
     case 'wfilter': G.wfilter = !G.wfilter; render(); return;
     case 'wopen': G.wOpen = !G.wOpen; render(); return;
     case 'wear': await wearToday(); return;
+    case 'pinnow': {
+      const o = currentOutfit();
+      const fav = findFavorite(o);
+      if (fav) await unpinOutfit(fav.id); else await pinOutfit(o, G.face);
+      return;
+    }
+    case 'pinwear': { const w = S.wears.find((x) => x.date === id); if (w) await pinOutfit(w.outfit, w.face_id); return; }
+    case 'unpin': await unpinOutfit(id); return;
+    case 'wearagain': {
+      const src = el.dataset.src === 'fav' ? S.favorites.find((f) => f.id === id) : S.wears.find((w) => w.date === id);
+      if (src) loadOutfit(src.outfit, src.face_id);
+      return;
+    }
+    case 'histmore': CLOSET.histLimit = (CLOSET.histLimit || 20) + 20; render(); return;
 
     case 'cfilter': CLOSET.filter = el.dataset.f; render(); return;
     case 'delface':
@@ -1233,7 +1333,7 @@ async function replacePhoto(id, file) {
 // ---------------------------------------------------------------------------
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 function applyState(d) {
-  S.pieces = d.pieces; S.wears = d.wears; S.faces = d.faces; S.settings = d.settings || {};
+  S.pieces = d.pieces; S.wears = d.wears; S.faces = d.faces; S.favorites = d.favorites || []; S.settings = d.settings || {};
   const t = normTheme(S.settings.theme || (() => { try { return localStorage.getItem('fh-theme'); } catch (e) { return null; } })());
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('fh-theme', t); } catch (e) { /* privat */ }

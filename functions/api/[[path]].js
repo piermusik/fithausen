@@ -19,6 +19,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS images (
     id TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, created_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS favorites (id TEXT PRIMARY KEY, outfit TEXT NOT NULL, face_id TEXT, created_at TEXT NOT NULL)`,
 ];
 
 let schemaReady = false;
@@ -63,17 +64,19 @@ async function handle({ request, env, params }) {
 
   // ---------- Gesamtzustand ----------
   if (a === 'state' && method === 'GET') {
-    const [p, w, f, s] = await db.batch([
+    const [p, w, f, s, fav] = await db.batch([
       db.prepare('SELECT * FROM pieces ORDER BY created_at DESC'),
       db.prepare('SELECT * FROM wears ORDER BY date DESC'),
       db.prepare('SELECT id, image_id, created_at FROM faces ORDER BY created_at'),
       db.prepare('SELECT * FROM settings'),
+      db.prepare('SELECT * FROM favorites ORDER BY created_at DESC'),
     ]);
     return json({
       pieces: p.results.map(rowPiece),
       wears: w.results.map((r) => ({ date: r.date, outfit: safeParse(r.outfit, {}), face_id: r.face_id })),
       faces: f.results,
       settings: Object.fromEntries(s.results.map((r) => [r.key, safeParse(r.value, null)])),
+      favorites: fav.results.map((r) => ({ id: r.id, outfit: safeParse(r.outfit, {}), face_id: r.face_id, created_at: r.created_at })),
     });
   }
 
@@ -178,6 +181,24 @@ async function handle({ request, env, params }) {
     }
   }
 
+  // ---------- Angepinnte Outfits ----------
+  if (a === 'favorites') {
+    if (!b && method === 'POST') {
+      const body = await request.json();
+      const outfit = cleanOutfit(body.outfit);
+      if (!Object.keys(outfit).length) return json({ error: 'Leeres Outfit' }, 400);
+      const faceId = typeof body.face_id === 'string' ? body.face_id.slice(0, 40) : null;
+      const id = uid();
+      const t = now();
+      await db.prepare('INSERT INTO favorites (id, outfit, face_id, created_at) VALUES (?, ?, ?, ?)').bind(id, JSON.stringify(outfit), faceId, t).run();
+      return json({ id, outfit, face_id: faceId, created_at: t });
+    }
+    if (b && method === 'DELETE') {
+      await db.prepare('DELETE FROM favorites WHERE id = ?').bind(b).run();
+      return json({ ok: true });
+    }
+  }
+
   // ---------- Einstellungen ----------
   if (a === 'settings' && method === 'PUT') {
     const body = await request.json();
@@ -257,6 +278,14 @@ function cleanPiece(b) {
   if ('notes' in b) o.notes = str(b.notes, 2000);
   if ('image_id' in b) o.image_id = str(b.image_id, 40);
   return o;
+}
+
+function cleanOutfit(o) {
+  const out = {};
+  if (o && typeof o === 'object') {
+    for (const [k, v] of Object.entries(o)) if (SLOTS.includes(k) && typeof v === 'string') out[k] = v.slice(0, 40);
+  }
+  return out;
 }
 
 function rowPiece(r) {
