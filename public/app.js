@@ -621,12 +621,7 @@ function closetView(tabArg) {
   if (tab === 'gesichter') return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${facesGrid()}`;
   if (tab === 'outfits') return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${outfitsView()}`;
 
-  const filters = [['alle', 'Alle'], ['lange', 'Lange nicht'], ['selten', 'Selten'], ['nie', 'Nie getragen']]
-    .map(([k, l]) => `<button class="pill ${CLOSET.filter === k ? 'on' : 'soft'}" data-act="cfilter" data-f="${k}">${l}</button>`).join('');
-  let list = tab === 'alle' ? [...S.pieces] : cands(tab);
-  if (CLOSET.filter === 'lange') list = list.filter(isStale);
-  if (CLOSET.filter === 'selten') list = list.filter((p) => statOf(p).count <= 2);
-  if (CLOSET.filter === 'nie') list = list.filter((p) => statOf(p).count === 0);
+  const list = tab === 'alle' ? [...S.pieces] : cands(tab);
   list.sort((a, b) => { const la = statOf(a).last || '0000', lb = statOf(b).last || '0000'; return la < lb ? -1 : la > lb ? 1 : 0; });
 
   const tiles = list.map((p, i) => {
@@ -636,8 +631,7 @@ function closetView(tabArg) {
   }).join('');
   const newTile = `<a class="newtile" style="--i:${list.length}" href="#/neu/${tab === 'alle' ? '' : tab}"><span class="iconbtn">${I.camera}</span><span>Neues Teil</span></a>`;
   const longLine = tab === 'alle' ? '' : `<p class="subtitle">${esc(SLOT[tab].long)}</p>`;
-  const empty = !list.length && CLOSET.filter !== 'alle' ? `<div class="card empty"><p>Nichts in diesem Filter.</p></div>` : '';
-  return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${longLine}<div class="row scroll-x" data-keep="filters">${filters}</div>${empty}<div class="grid">${tiles}${newTile}</div>`;
+  return `${head}<nav class="row scroll-x tabs" data-keep="tabs">${tabs}</nav>${longLine}<div class="grid">${tiles}${newTile}</div>`;
 }
 
 function facesGrid() {
@@ -923,7 +917,6 @@ app.addEventListener('click', async (ev) => {
     case 'ofunzoom': CLOSET.zoom = null; render(); return;
     case 'histmore': CLOSET.histLimit = (CLOSET.histLimit || 20) + 20; render(); return;
 
-    case 'cfilter': CLOSET.filter = el.dataset.f; render(); return;
     case 'delface':
       try { await api('/faces/' + id, { method: 'DELETE' }); S.faces = S.faces.filter((f) => f.id !== id); if (G.face === id) G.face = null; render(); } catch (e) { toast(e.message); }
       return;
