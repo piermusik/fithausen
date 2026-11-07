@@ -33,7 +33,7 @@ const BOX = {
 // Wo das Bild in seinem Feld klebt: Oberteile und Hosen oben bündig, Schuhe unten
 const ANCHOR = { hose: '50% 0%', schuhe: '50% 100%', basis: '50% 0%', mitte: '50% 0%', drueber: '50% 0%', aussen: '50% 0%', schal: '50% 0%', tasche: '50% 50%', kopf: '50% 100%' };
 const CHIP_COLORS = { kopf: '#E4A0F7', schal: '#FF48B0', aussen: '#3E6B48', drueber: '#E8B04B', mitte: '#00A95C', basis: '#0078BF', hose: '#FF6C2F', schuhe: '#8B4A2B', tasche: '#C1502E' };
-const VERSION = '8';
+const VERSION = '9';
 const GHOSTS = ['rgba(255,72,176,.8)', 'rgba(33,64,212,.55)', 'rgba(255,232,0,.95)'];
 // Flugbahn beim Refresh/Shuffle: [dx, dy, Drehung, Verzögerung]
 const FLY = { hose: [-260, 80, -50, 0.04], schuhe: [220, 160, 70, 0.1], basis: [260, -60, 40, 0.16], mitte: [-260, -140, -35, 0.24], drueber: [240, -260, 60, 0.3], aussen: [0, -460, 25, 0.36], schal: [280, -240, 120, 0.44], tasche: [300, 40, -80, 0.4], kopf: [-120, -380, -140, 0.5] };
@@ -90,7 +90,7 @@ const I = {
 // ---------------------------------------------------------------------------
 const app = document.getElementById('app');
 const S = { phase: 'loading', pieces: [], wears: [], faces: [], favorites: [], settings: {}, weather: null, err: null, st: {} };
-const G = { init: false, active: [], pick: {}, held: {}, sel: null, face: null, wfilter: true, addOpen: false, touched: false };
+const G = { moved: {}, init: false, active: [], pick: {}, held: {}, sel: null, face: null, wfilter: true, addOpen: false, touched: false };
 let ADD = null;
 let CLOSET = { tab: 'alle', filter: 'alle' };
 let confirmDel = null;
@@ -332,9 +332,9 @@ function slotHTML(k, p, o = {}) {
   const [x, y, wd, h, z] = BOX[k];
   const [dx, dy, rot, dl] = FLY[k];
   const f = fitOf(p);
-  const cls = ['slot', o.sel ? 'is-sel' : '', o.held ? 'held' : '', o.over ? 'over' : ''].join(' ');
-  const fan = o.fan != null ? ` data-fan="${o.fan}"` : '';
-  return `<button class="${cls}"${fan} data-act="${o.act || 'sel'}" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.5 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s;--op:${ANCHOR[k] || '50% 50%'};--fs:${f.s};--fx:${f.x};--fy:${f.y}" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
+  const mv = o.moved;
+  const cls = ['slot', o.sel ? 'is-sel' : '', o.held ? 'held' : '', mv ? 'lifted' : ''].join(' ');
+  return `<button class="${cls}" data-act="${o.act || 'sel'}" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.5 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s;--op:${ANCHOR[k] || '50% 50%'};--fs:${f.s};--fx:${f.x};--fy:${f.y}${mv ? `;--sx:${mv.x}px;--sy:${mv.y}px` : ''}" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
 }
 // Großes Bild mit Klebeband, das wirklich am Bild klebt
 function pinHero(src, opts = {}) {
@@ -438,18 +438,16 @@ function gameView() {
   // Bühne
   const torso = TORSO.filter((k) => G.active.includes(k) && G.pick[k]);
   const covered = torso.slice(1);
-  // Beim Zur-Seite-Ziehen: äußerste Schicht geht ganz mit, innerste bleibt stehen
-  const fanOf = {};
-  if (torso.length > 1) {
-    torso.forEach((k, i) => { fanOf[k] = Math.round(((torso.length - 1 - i) / (torso.length - 1)) * 100) / 100; });
-    for (const k of ['schal', 'tasche']) if (G.active.includes(k)) fanOf[k] = 1;
-  }
-  const parts = G.active.map((k) => slotHTML(k, pieceById(G.pick[k]), { sel: k === G.sel, held: G.held[k] && !S.flyAll, fan: fanOf[k] })).join('');
+  // Weggezogene Teile vergessen, wenn das Teil gewechselt wurde
+  for (const k of Object.keys(G.moved)) if (!G.active.includes(k) || G.moved[k].id !== G.pick[k]) delete G.moved[k];
+  const parts = G.active.map((k) => slotHTML(k, pieceById(G.pick[k]), { sel: k === G.sel, held: G.held[k] && !S.flyAll, moved: G.moved[k] })).join('');
   const peeks = covered.length ? `<div class="peeks ui" style="--ud:.3s"><span class="peeks-lab">DRUNTER</span>${covered.map((k) => {
     const p = pieceById(G.pick[k]);
     return `<button class="peek" data-act="peek" data-slot="${k}" aria-label="Drunter: ${esc(SLOT[k].label)}, ${esc(p.name)} groß zeigen">${cutHTML(p)}<small>${esc(SLOT[k].label)}</small></button>`;
   }).join('')}</div>` : '';
-  const holdHint = covered.length ? `<span class="hold-hint ui">zur Seite ziehen = drunter schauen</span>` : '';
+  const holdHint = Object.keys(G.moved).length
+    ? `<button class="pill soft hint-btn ui" data-act="unmoveall">Alles zurück auf den Avatar</button>`
+    : `<span class="hold-hint ui">Teile wegziehen · antippen legt sie zurück</span>`;
   const zp = G.zoom && G.active.includes(G.zoom) ? pieceById(G.pick[G.zoom]) : null;
   const zoom = zp ? `<div class="zoom" data-act="unzoom" role="dialog" aria-label="${esc(zp.name)}">${pinHero(zp.image_id ? '/api/images/' + zp.image_id : '', { ghost: ghost(zp.id), paper: paper(zp.id), rot: tilt(zp.id), alt: zp.name, color: zp.color })}
       <p class="zoom-name"><span class="lab">${esc(SLOT[G.zoom].label)}</span><strong>${esc(zp.name)}</strong><span class="sub">${esc(wornText(zp))} · antippen zum Schließen</span></p></div>` : '';
@@ -869,7 +867,10 @@ app.addEventListener('click', async (ev) => {
   switch (act) {
     case 'reload': location.reload(); return;
     case 'refresh': refresh(); return;
-    case 'sel': G.sel = slot; render(); return;
+    case 'sel':
+      if (G.moved[slot] && el.closest('#stage')) { springBack([slot]); return; }
+      G.sel = slot; render(); return;
+    case 'unmoveall': springBack(Object.keys(G.moved)); return;
     case 'peek': G.sel = slot; G.zoom = slot; render(); return;
     case 'unzoom': G.zoom = null; render(); return;
     case 'none': return;
@@ -883,7 +884,7 @@ app.addEventListener('click', async (ev) => {
       if (!G.active.includes(slot)) G.active = ORDER.filter((k) => G.active.includes(k) || k === slot);
       rollSlot(slot); G.sel = slot; G.addOpen = false; G.touched = true; render(); return;
     case 'face': rollFace(); G.touched = true; render(); return;
-    case 'shuffle': shuffleAll(true); G.touched = true; S.flyUntil = Date.now() + 1300; render(); return;
+    case 'shuffle': G.moved = {}; shuffleAll(true); G.touched = true; S.flyUntil = Date.now() + 1300; render(); return;
     case 'wfilter': G.wfilter = !G.wfilter; render(); return;
     case 'wopen': G.wOpen = !G.wOpen; render(); return;
     case 'wear': await wearToday(); return;
@@ -1048,34 +1049,41 @@ app.addEventListener('submit', async (ev) => {
   }
 });
 
-// Obere Schichten zur Seite ziehen, um drunter zu schauen (federt zurück)
+// Teile vom Avatar wegziehen: bleiben liegen, Antippen legt sie zurück
 let drag = null, dragUsed = false;
 app.addEventListener('pointerdown', (ev) => {
   dragUsed = false;
-  const st = ev.target.closest('#stage');
-  if (!st) return;
-  drag = { x: ev.clientX, y: ev.clientY, st, moved: false, layers: [...st.querySelectorAll('.slot[data-fan]')] };
+  const el = ev.target.closest('#stage .slot');
+  if (!el || !el.dataset.slot) return;
+  const m = G.moved[el.dataset.slot] || { x: 0, y: 0 };
+  drag = { el, slot: el.dataset.slot, x0: ev.clientX, y0: ev.clientY, bx: m.x, by: m.y, moved: false, id: ev.pointerId };
 });
 app.addEventListener('pointermove', (ev) => {
-  if (!drag) return;
-  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  if (!drag || ev.pointerId !== drag.id) return;
+  const dx = ev.clientX - drag.x0, dy = ev.clientY - drag.y0;
   if (!drag.moved) {
-    if (Math.abs(dx) < 8) return;
-    if (Math.abs(dy) > Math.abs(dx) || !drag.layers.length) { drag = null; return; }
+    if (Math.hypot(dx, dy) < 8) return;
     drag.moved = true;
-    drag.st.classList.add('dragging');
-    try { drag.st.setPointerCapture(ev.pointerId); } catch (e) { /* egal */ }
+    drag.el.classList.add('lifted', 'dragging');
+    try { drag.el.setPointerCapture(ev.pointerId); } catch (e) { /* egal */ }
   }
-  const max = drag.st.clientWidth * 0.8;
-  const d = Math.max(-max, Math.min(max, dx));
-  drag.layers.forEach((el) => el.style.setProperty('--sx', `${d * Number(el.dataset.fan)}px`));
+  const st = document.getElementById('stage');
+  const mx = st ? st.clientWidth : 300, my = st ? st.clientHeight * 0.7 : 300;
+  drag.cx = Math.max(-mx, Math.min(mx, drag.bx + dx));
+  drag.cy = Math.max(-my, Math.min(my, drag.by + dy));
+  drag.el.style.setProperty('--sx', `${drag.cx}px`);
+  drag.el.style.setProperty('--sy', `${drag.cy}px`);
 });
-const endDrag = () => {
-  if (!drag) return;
+const endDrag = (ev) => {
+  if (!drag || (ev && ev.pointerId !== drag.id)) return;
   if (drag.moved) {
     dragUsed = true;
-    drag.st.classList.remove('dragging');
-    drag.layers.forEach((el) => el.style.setProperty('--sx', '0px'));
+    drag.el.classList.remove('dragging');
+    G.moved[drag.slot] = { x: drag.cx, y: drag.cy, id: G.pick[drag.slot] };
+    const first = Object.keys(G.moved).length === 1;
+    drag = null;
+    if (first) render(); // "Alles zurück" einblenden
+    return;
   }
   drag = null;
 };
@@ -1084,6 +1092,15 @@ app.addEventListener('pointercancel', endDrag);
 app.addEventListener('contextmenu', (ev) => { if (ev.target.closest('#stage')) ev.preventDefault(); });
 // Klick nach dem Ziehen nicht als Auswahl zählen
 app.addEventListener('click', (ev) => { if (dragUsed && ev.target.closest('#stage')) { dragUsed = false; ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
+// Weggezogenes Teil federnd zurücklegen
+function springBack(slots) {
+  slots.forEach((k) => {
+    delete G.moved[k];
+    const el = document.querySelector(`#stage .slot[data-slot="${k}"]`);
+    if (el) { el.style.setProperty('--sx', '0px'); el.style.setProperty('--sy', '0px'); el.classList.remove('lifted'); }
+  });
+  setTimeout(() => { if (route().view === 'game') render(); }, 520);
+}
 
 // Einfügen eines (freigestellten) Bildes beim Hinzufügen
 document.addEventListener('paste', (ev) => {
