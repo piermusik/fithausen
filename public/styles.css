@@ -186,7 +186,7 @@ img { display: block; }
 .slot {
   position: absolute; padding: 0; margin: 0; border: none; background: none;
   display: flex; align-items: center; justify-content: center;
-  transform: rotate(var(--r, 0deg));
+  transform: translateX(var(--sx, 0px)) rotate(var(--r, 0deg));
   border-radius: 10px;
 }
 .slot.is-sel::after {
@@ -585,3 +585,13 @@ span.act { background: transparent; border-color: transparent; }
 .of-actions .pill { height: 38px; font-size: 13px; }
 .pill.icon { width: 38px; padding: 0; }
 .pill.icon.starred, .pin-card .pill.icon { color: #E0A800; }
+
+/* ---------- v8 ---------- */
+.slot.is-sel::after { display: none; }
+.slot { transition: transform .5s cubic-bezier(.2, 1.5, .4, 1), opacity .2s ease; }
+.stage.dragging .slot { transition: none; }
+.stage { cursor: grab; }
+.stage.dragging { cursor: grabbing; }
+.ofcard[data-act] { cursor: pointer; }
+.zoom-outfit { display: flex; justify-content: center; flex-shrink: 0; }
+.stage.mini.xl { width: 240px; aspect-ratio: 3 / 4; }

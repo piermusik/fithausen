@@ -4,8 +4,6 @@
 // Konstanten
 // ---------------------------------------------------------------------------
 const SLOT_DEFS = [
-  { key: 'kopf', label: 'Mützen', long: 'Mützen & Caps' },
-  { key: 'schal', label: 'Schals', long: 'Schals & Tücher' },
   { key: 'aussen', label: 'Jacken', long: 'Jacken & Mäntel' },
   { key: 'drueber', label: 'Strickjacken', long: 'Strickjacken & Overshirts' },
   { key: 'mitte', label: 'Pullis', long: 'Pullis & Hoodies' },
@@ -13,6 +11,8 @@ const SLOT_DEFS = [
   { key: 'hose', label: 'Hosen', long: 'Hosen & Shorts', required: true },
   { key: 'schuhe', label: 'Schuhe', long: 'Schuhe', required: true },
   { key: 'tasche', label: 'Taschen', long: 'Taschen & Beutel' },
+  { key: 'schal', label: 'Schals', long: 'Schals & Tücher' },
+  { key: 'kopf', label: 'Mützen', long: 'Mützen & Caps' },
 ];
 const SLOT = Object.fromEntries(SLOT_DEFS.map((s) => [s.key, s]));
 const ORDER = SLOT_DEFS.map((s) => s.key);
@@ -21,19 +21,19 @@ const TORSO = ['aussen', 'drueber', 'mitte', 'basis']; // außen → innen
 const BOX = {
   hose: [21, 46, 58, 45, 1],
   schuhe: [19, 85, 62, 15, 2],
-  basis: [20, 19, 60, 37, 3],
-  mitte: [16, 18, 68, 39, 4],
-  drueber: [14, 17.5, 72, 41, 5],
-  aussen: [10, 17, 80, 47, 6],
-  schal: [31, 15, 38, 24, 7],
-  tasche: [68, 40, 32, 26, 8],
-  face: [30, -4, 40, 25, 9],
+  face: [30, -4, 40, 25, 3],
+  basis: [20, 19, 60, 37, 4],
+  mitte: [16, 18, 68, 39, 5],
+  drueber: [14, 17.5, 72, 41, 6],
+  aussen: [10, 17, 80, 47, 7],
+  schal: [31, 15, 38, 24, 8],
+  tasche: [68, 40, 32, 26, 9],
   kopf: [30, -10, 40, 14, 10],
 };
 // Wo das Bild in seinem Feld klebt: Oberteile und Hosen oben bündig, Schuhe unten
 const ANCHOR = { hose: '50% 0%', schuhe: '50% 100%', basis: '50% 0%', mitte: '50% 0%', drueber: '50% 0%', aussen: '50% 0%', schal: '50% 0%', tasche: '50% 50%', kopf: '50% 100%' };
 const CHIP_COLORS = { kopf: '#E4A0F7', schal: '#FF48B0', aussen: '#3E6B48', drueber: '#E8B04B', mitte: '#00A95C', basis: '#0078BF', hose: '#FF6C2F', schuhe: '#8B4A2B', tasche: '#C1502E' };
-const VERSION = '7';
+const VERSION = '8';
 const GHOSTS = ['rgba(255,72,176,.8)', 'rgba(33,64,212,.55)', 'rgba(255,232,0,.95)'];
 // Flugbahn beim Refresh/Shuffle: [dx, dy, Drehung, Verzögerung]
 const FLY = { hose: [-260, 80, -50, 0.04], schuhe: [220, 160, 70, 0.1], basis: [260, -60, 40, 0.16], mitte: [-260, -140, -35, 0.24], drueber: [240, -260, 60, 0.3], aussen: [0, -460, 25, 0.36], schal: [280, -240, 120, 0.44], tasche: [300, 40, -80, 0.4], kopf: [-120, -380, -140, 0.5] };
@@ -333,7 +333,8 @@ function slotHTML(k, p, o = {}) {
   const [dx, dy, rot, dl] = FLY[k];
   const f = fitOf(p);
   const cls = ['slot', o.sel ? 'is-sel' : '', o.held ? 'held' : '', o.over ? 'over' : ''].join(' ');
-  return `<button class="${cls}" data-act="${o.act || 'sel'}" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.5 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s;--op:${ANCHOR[k] || '50% 50%'};--fs:${f.s};--fx:${f.x};--fy:${f.y}" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
+  const fan = o.fan != null ? ` data-fan="${o.fan}"` : '';
+  return `<button class="${cls}"${fan} data-act="${o.act || 'sel'}" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.5 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s;--op:${ANCHOR[k] || '50% 50%'};--fs:${f.s};--fx:${f.x};--fy:${f.y}" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
 }
 // Großes Bild mit Klebeband, das wirklich am Bild klebt
 function pinHero(src, opts = {}) {
@@ -437,13 +438,18 @@ function gameView() {
   // Bühne
   const torso = TORSO.filter((k) => G.active.includes(k) && G.pick[k]);
   const covered = torso.slice(1);
-  const overSet = new Set([...torso.slice(0, -1), 'schal', 'tasche']);
-  const parts = G.active.map((k) => slotHTML(k, pieceById(G.pick[k]), { sel: k === G.sel, held: G.held[k] && !S.flyAll, over: overSet.has(k) })).join('');
+  // Beim Zur-Seite-Ziehen: äußerste Schicht geht ganz mit, innerste bleibt stehen
+  const fanOf = {};
+  if (torso.length > 1) {
+    torso.forEach((k, i) => { fanOf[k] = Math.round(((torso.length - 1 - i) / (torso.length - 1)) * 100) / 100; });
+    for (const k of ['schal', 'tasche']) if (G.active.includes(k)) fanOf[k] = 1;
+  }
+  const parts = G.active.map((k) => slotHTML(k, pieceById(G.pick[k]), { sel: k === G.sel, held: G.held[k] && !S.flyAll, fan: fanOf[k] })).join('');
   const peeks = covered.length ? `<div class="peeks ui" style="--ud:.3s"><span class="peeks-lab">DRUNTER</span>${covered.map((k) => {
     const p = pieceById(G.pick[k]);
     return `<button class="peek" data-act="peek" data-slot="${k}" aria-label="Drunter: ${esc(SLOT[k].label)}, ${esc(p.name)} groß zeigen">${cutHTML(p)}<small>${esc(SLOT[k].label)}</small></button>`;
   }).join('')}</div>` : '';
-  const holdHint = covered.length ? `<span class="hold-hint ui">gedrückt halten = durchschauen</span>` : '';
+  const holdHint = covered.length ? `<span class="hold-hint ui">zur Seite ziehen = drunter schauen</span>` : '';
   const zp = G.zoom && G.active.includes(G.zoom) ? pieceById(G.pick[G.zoom]) : null;
   const zoom = zp ? `<div class="zoom" data-act="unzoom" role="dialog" aria-label="${esc(zp.name)}">${pinHero(zp.image_id ? '/api/images/' + zp.image_id : '', { ghost: ghost(zp.id), paper: paper(zp.id), rot: tilt(zp.id), alt: zp.name, color: zp.color })}
       <p class="zoom-name"><span class="lab">${esc(SLOT[G.zoom].label)}</span><strong>${esc(zp.name)}</strong><span class="sub">${esc(wornText(zp))} · antippen zum Schließen</span></p></div>` : '';
@@ -537,7 +543,7 @@ function dayLabel(date) {
 function outfitsView() {
   const pins = S.favorites.filter((f) => outfitNames(f.outfit).length);
   const pinRow = pins.length
-    ? `<div class="row scroll-x pinrow" data-keep="pins">${pins.map((f, i) => `<div class="card ofcard pin-card" style="--i:${i}">
+    ? `<div class="row scroll-x pinrow" data-keep="pins">${pins.map((f, i) => `<div class="card ofcard pin-card" style="--i:${i}" data-act="ofzoom" data-src="fav" data-id="${f.id}" role="button" tabindex="0" aria-label="Outfit groß zeigen">
         ${miniAvatar(f.outfit, f.face_id)}
         <div class="of-actions"><button class="pill soft" data-act="wearagain" data-src="fav" data-id="${f.id}">Anziehen</button>
         <button class="pill soft icon" data-act="unpin" data-id="${f.id}" aria-label="Nicht mehr anpinnen">${I.starFill}</button></div></div>`).join('')}</div>`
@@ -547,7 +553,7 @@ function outfitsView() {
   const feed = wears.slice(0, limit).map((w, i) => {
     const fav = findFavorite(w.outfit);
     const names = outfitNames(w.outfit);
-    return `<div class="card ofcard feed-card" style="--i:${i}">
+    return `<div class="card ofcard feed-card" style="--i:${i}" data-act="ofzoom" data-src="wear" data-id="${w.date}" role="button" tabindex="0" aria-label="Outfit groß zeigen">
       ${miniAvatar(w.outfit, w.face_id)}
       <div class="of-info"><span class="lab">${esc(dayLabel(w.date))}</span>
         <span class="of-names">${names.map(esc).join(' · ')}</span>
@@ -557,7 +563,17 @@ function outfitsView() {
   }).join('');
   const more = wears.length > limit ? `<button class="pill" data-act="histmore" style="align-self:center">Ältere zeigen</button>` : '';
   const feedBlock = wears.length ? `<div class="feed">${feed}</div>${more}` : `<div class="card empty"><p>Noch kein Outfit geloggt. Tipp im Mini-Game auf „Heute an“, dann landet es hier.</p></div>`;
-  return `<h2 class="sec-title">Angepinnt</h2>${pinRow}<h2 class="sec-title">Verlauf</h2>${feedBlock}`;
+  let zoom = '';
+  const z = CLOSET.zoom;
+  const zs = z ? (z.src === 'fav' ? S.favorites.find((f) => f.id === z.id) : S.wears.find((w) => w.date === z.id)) : null;
+  if (zs) {
+    const label = z.src === 'fav' ? 'Angepinnt' : dayLabel(zs.date);
+    zoom = `<div class="zoom" data-act="ofunzoom" role="dialog" aria-label="Outfit groß">
+      <div class="zoom-outfit">${miniAvatar(zs.outfit, zs.face_id).replace('stage mini', 'stage mini xl')}</div>
+      <div class="zoom-name"><span class="lab">${esc(label)}</span><strong>${outfitNames(zs.outfit).map(esc).join(' · ')}</strong>
+        <div class="of-actions" style="justify-content:center;margin-top:6px"><button class="pill blue" data-act="wearagain" data-src="${z.src}" data-id="${z.id}">Anziehen</button><button class="pill soft" data-act="ofunzoom">Schließen</button></div></div></div>`;
+  }
+  return `<h2 class="sec-title">Angepinnt</h2>${pinRow}<h2 class="sec-title">Verlauf</h2>${feedBlock}${zoom}`;
 }
 function loadOutfit(outfit, faceId) {
   const ok = Object.fromEntries(Object.entries(outfit).filter(([, id]) => pieceById(id)));
@@ -881,9 +897,12 @@ app.addEventListener('click', async (ev) => {
     case 'unpin': await unpinOutfit(id); return;
     case 'wearagain': {
       const src = el.dataset.src === 'fav' ? S.favorites.find((f) => f.id === id) : S.wears.find((w) => w.date === id);
+      CLOSET.zoom = null;
       if (src) loadOutfit(src.outfit, src.face_id);
       return;
     }
+    case 'ofzoom': CLOSET.zoom = { src: el.dataset.src, id }; render(); return;
+    case 'ofunzoom': CLOSET.zoom = null; render(); return;
     case 'histmore': CLOSET.histLimit = (CLOSET.histLimit || 20) + 20; render(); return;
 
     case 'cfilter': CLOSET.filter = el.dataset.f; render(); return;
@@ -1029,35 +1048,42 @@ app.addEventListener('submit', async (ev) => {
   }
 });
 
-// Gedrückt halten auf dem Avatar = obere Schichten durchsichtig
-let holdT = null, holdUsed = false, holdX = 0, holdY = 0;
+// Obere Schichten zur Seite ziehen, um drunter zu schauen (federt zurück)
+let drag = null, dragUsed = false;
 app.addEventListener('pointerdown', (ev) => {
+  dragUsed = false;
   const st = ev.target.closest('#stage');
-  holdUsed = false;
   if (!st) return;
-  holdX = ev.clientX; holdY = ev.clientY;
-  clearTimeout(holdT);
-  holdT = setTimeout(() => { holdUsed = true; st.classList.add('onion'); }, 320);
+  drag = { x: ev.clientX, y: ev.clientY, st, moved: false, layers: [...st.querySelectorAll('.slot[data-fan]')] };
 });
 app.addEventListener('pointermove', (ev) => {
-  if (holdT && (Math.abs(ev.clientX - holdX) > 12 || Math.abs(ev.clientY - holdY) > 12) && !holdUsed) clearTimeout(holdT);
+  if (!drag) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  if (!drag.moved) {
+    if (Math.abs(dx) < 8) return;
+    if (Math.abs(dy) > Math.abs(dx) || !drag.layers.length) { drag = null; return; }
+    drag.moved = true;
+    drag.st.classList.add('dragging');
+    try { drag.st.setPointerCapture(ev.pointerId); } catch (e) { /* egal */ }
+  }
+  const max = drag.st.clientWidth * 0.8;
+  const d = Math.max(-max, Math.min(max, dx));
+  drag.layers.forEach((el) => el.style.setProperty('--sx', `${d * Number(el.dataset.fan)}px`));
 });
-const endHold = () => { clearTimeout(holdT); holdT = null; const st = document.getElementById('stage'); if (st) st.classList.remove('onion'); };
-app.addEventListener('pointerup', endHold);
-app.addEventListener('pointercancel', endHold);
+const endDrag = () => {
+  if (!drag) return;
+  if (drag.moved) {
+    dragUsed = true;
+    drag.st.classList.remove('dragging');
+    drag.layers.forEach((el) => el.style.setProperty('--sx', '0px'));
+  }
+  drag = null;
+};
+app.addEventListener('pointerup', endDrag);
+app.addEventListener('pointercancel', endDrag);
 app.addEventListener('contextmenu', (ev) => { if (ev.target.closest('#stage')) ev.preventDefault(); });
-// Klick nach dem Halten nicht als Auswahl zählen
-app.addEventListener('click', (ev) => { if (holdUsed && ev.target.closest('#stage')) { holdUsed = false; ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
-
-// Wischen auf der Bühne = nächstes/vorheriges Teil
-let touchX = null;
-app.addEventListener('touchstart', (ev) => { if (ev.target.closest('#stage')) touchX = ev.touches[0].clientX; }, { passive: true });
-app.addEventListener('touchend', (ev) => {
-  if (touchX === null) return;
-  const dx = ev.changedTouches[0].clientX - touchX;
-  touchX = null;
-  if (Math.abs(dx) > 50 && !holdUsed) step(dx < 0 ? 1 : -1);
-}, { passive: true });
+// Klick nach dem Ziehen nicht als Auswahl zählen
+app.addEventListener('click', (ev) => { if (dragUsed && ev.target.closest('#stage')) { dragUsed = false; ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
 
 // Einfügen eines (freigestellten) Bildes beim Hinzufügen
 document.addEventListener('paste', (ev) => {
