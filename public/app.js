@@ -33,7 +33,7 @@ const BOX = {
 // Wo das Bild in seinem Feld klebt: Oberteile und Hosen oben bündig, Schuhe unten
 const ANCHOR = { hose: '50% 0%', schuhe: '50% 100%', basis: '50% 0%', mitte: '50% 0%', drueber: '50% 0%', aussen: '50% 0%', schal: '50% 0%', tasche: '50% 50%', kopf: '50% 100%' };
 const CHIP_COLORS = { kopf: '#E4A0F7', schal: '#FF48B0', aussen: '#3E6B48', drueber: '#E8B04B', mitte: '#00A95C', basis: '#0078BF', hose: '#FF6C2F', schuhe: '#8B4A2B', tasche: '#C1502E' };
-const VERSION = '9';
+const VERSION = '10';
 const GHOSTS = ['rgba(255,72,176,.8)', 'rgba(33,64,212,.55)', 'rgba(255,232,0,.95)'];
 // Flugbahn beim Refresh/Shuffle: [dx, dy, Drehung, Verzögerung]
 const FLY = { hose: [-260, 80, -50, 0.04], schuhe: [220, 160, 70, 0.1], basis: [260, -60, 40, 0.16], mitte: [-260, -140, -35, 0.24], drueber: [240, -260, 60, 0.3], aussen: [0, -460, 25, 0.36], schal: [280, -240, 120, 0.44], tasche: [300, 40, -80, 0.4], kopf: [-120, -380, -140, 0.5] };
@@ -333,7 +333,7 @@ function slotHTML(k, p, o = {}) {
   const [dx, dy, rot, dl] = FLY[k];
   const f = fitOf(p);
   const mv = o.moved;
-  const cls = ['slot', o.sel ? 'is-sel' : '', o.held ? 'held' : '', mv ? 'lifted' : ''].join(' ');
+  const cls = ['slot', o.sel ? 'is-sel' : '', o.held ? 'held' : '', mv ? 'lifted' : '', o.swap ? 'swap' : ''].join(' ');
   return `<button class="${cls}" data-act="${o.act || 'sel'}" data-slot="${k}" style="left:${x}%;top:${y}%;width:${wd}%;height:${h}%;z-index:${z};--r:${p ? tilt(p.id) * 0.5 : 0}deg;--dx:${dx}px;--dy:${dy}px;--rot:${rot}deg;--d:${dl}s;--op:${ANCHOR[k] || '50% 50%'};--fs:${f.s};--fx:${f.x};--fy:${f.y}${mv ? `;--sx:${mv.x}px;--sy:${mv.y}px` : ''}" aria-label="${esc(SLOT[k].label)}: ${esc(p ? p.name : 'leer')}">${p ? cutHTML(p) : `<span class="slot-empty">${esc(SLOT[k].label)}?</span>`}</button>`;
 }
 // Großes Bild mit Klebeband, das wirklich am Bild klebt
@@ -440,7 +440,12 @@ function gameView() {
   const covered = torso.slice(1);
   // Weggezogene Teile vergessen, wenn das Teil gewechselt wurde
   for (const k of Object.keys(G.moved)) if (!G.active.includes(k) || G.moved[k].id !== G.pick[k]) delete G.moved[k];
-  const parts = G.active.map((k) => slotHTML(k, pieceById(G.pick[k]), { sel: k === G.sel, held: G.held[k] && !S.flyAll, moved: G.moved[k] })).join('');
+  // Nur Teile, die sich seit dem letzten Mal geändert haben, ploppen neu rein
+  const prevPick = S.lastPick;
+  const flyingNow = Date.now() < (S.flyUntil || 0);
+  const swapped = (k) => !flyingNow && prevPick && prevPick[k] !== G.pick[k];
+  const parts = G.active.map((k) => slotHTML(k, pieceById(G.pick[k]), { sel: k === G.sel, held: G.held[k] && !S.flyAll, moved: G.moved[k], swap: swapped(k) })).join('');
+  S.lastPick = Object.fromEntries(G.active.map((k) => [k, G.pick[k]]));
   const peeks = covered.length ? `<div class="peeks ui" style="--ud:.3s"><span class="peeks-lab">DRUNTER</span>${covered.map((k) => {
     const p = pieceById(G.pick[k]);
     return `<button class="peek" data-act="peek" data-slot="${k}" aria-label="Drunter: ${esc(SLOT[k].label)}, ${esc(p.name)} groß zeigen">${cutHTML(p)}<small>${esc(SLOT[k].label)}</small></button>`;
@@ -833,7 +838,19 @@ function render() {
   }
   const keep = {};
   app.querySelectorAll('[data-keep]').forEach((el) => { keep[el.dataset.keep] = el.scrollLeft; });
+  // Bilder, die gleich bleiben, wiederverwenden: so blitzt nichts neu auf
+  const oldImgs = {};
+  app.querySelectorAll('img').forEach((img) => { const k = img.getAttribute('src'); (oldImgs[k] = oldImgs[k] || []).push(img); });
   app.innerHTML = html;
+  app.querySelectorAll('img').forEach((img) => {
+    const pool = oldImgs[img.getAttribute('src')];
+    if (!pool || !pool.length) return;
+    const old = pool.shift();
+    for (const a of [...old.attributes]) if (a.name !== 'src' && !img.hasAttribute(a.name)) old.removeAttribute(a.name);
+    for (const a of [...img.attributes]) if (a.name !== 'src') old.setAttribute(a.name, a.value);
+    old.removeAttribute('loading');
+    img.replaceWith(old);
+  });
   app.querySelectorAll('[data-keep]').forEach((el) => {
     if (keep[el.dataset.keep] != null) el.scrollLeft = keep[el.dataset.keep];
     const on = el.querySelector('.on');

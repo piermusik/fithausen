@@ -605,3 +605,8 @@ span.act { background: transparent; border-color: transparent; }
 .hint-btn { height: 34px; font-size: 12px; }
 /* Bedienelemente bleiben über weggezogenen Teilen */
 .slotwrap, .hint-btn, [data-keep="chips"] { position: relative; z-index: 30; }
+
+/* ---------- v10: nur das gewechselte Teil ploppt ---------- */
+@keyframes swapIn { 0% { scale: .55; opacity: 0; } 60% { scale: 1.07; opacity: 1; } 100% { scale: 1; opacity: 1; } }
+.slot.swap { animation: swapIn .42s cubic-bezier(.2, 1.4, .4, 1) both; }
+.slot .cut { transition: none; }
